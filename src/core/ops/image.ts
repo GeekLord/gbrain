@@ -1,3 +1,4 @@
+import { readPolicyOpts } from './context.ts';
 /**
  * Image-as-query operation cluster — pure move from operations.ts (v0.46.x
  * tranche 3): the v0.36 Phase 2 search_by_image op plus its cluster-local
@@ -16,6 +17,7 @@ import { resolveRequestedScope } from './context.ts';
 
 const search_by_image: Operation = {
   name: 'search_by_image',
+  outputRedaction: 'retrieval',
   description:
     'v0.36 cross-modal Phase 2: image-as-query retrieval. Accepts a local path (CLI), data: URI, or http(s):// URL ' +
     '(SSRF-defended). Returns visually-similar image chunks plus any OCR text they carry. Optional `query` text ' +
@@ -115,7 +117,7 @@ const search_by_image: Operation = {
           limit: (p.limit as number) || 20,
           offset: (p.offset as number) || 0,
           query: queryRefinement,
-          ...imageSourceScope,
+          ...await readPolicyOpts(ctx, imageSourceScope),
         },
       );
     } catch (providerError) {

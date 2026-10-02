@@ -27,6 +27,7 @@ import { sourceScopeOpts } from './context.ts';
 
 const get_active_schema_pack: Operation = {
   name: 'get_active_schema_pack',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: cheap identity packet for the active schema pack. Returns {pack_name, version, sha8, page_types_count, link_types_count, primitive_summary, source_tier}. Useful for agents to know which pack they are operating against without paying full manifest load cost.',
   params: {},
   scope: 'read',
@@ -63,6 +64,7 @@ const get_active_schema_pack: Operation = {
 
 const list_schema_packs: Operation = {
   name: 'list_schema_packs',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: list installed schema packs (bundled + user-installed). Returns {bundled: string[], installed: string[]}. Read-only directory listing.',
   params: {},
   scope: 'read',
@@ -88,6 +90,7 @@ const list_schema_packs: Operation = {
 
 const schema_stats: Operation = {
   name: 'schema_stats',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: per-type page counts + typed-coverage from the DB. Returns {schema_version:1, pack_identity, aggregate, per_source, dead_prefixes}. Multi-source aware via ctx.sourceId/allowedSources.',
   params: {},
   scope: 'read',
@@ -103,6 +106,7 @@ const schema_stats: Operation = {
 
 const schema_lint: Operation = {
   name: 'schema_lint',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: lint the active (or named) schema pack. File-plane rules only over MCP — the with_db option is rejected for remote callers (DB-aware rules require local CLI). Returns {ok, errors, warnings} structured report.',
   params: {
     pack: { type: 'string', description: 'Pack name (default: active pack)' },
@@ -141,7 +145,10 @@ const schema_lint: Operation = {
       // count as declared — parity with the active-pack branch below.
       manifest = (await resolveLoadedPack(loader(path))).manifest;
     } else {
-      const resolved = await loadActivePack({ cfg, remote: ctx.remote ?? true, sourceId: ctx.sourceId });
+      // #4653: tier-4 DB-plane schema_pack, same read get_active_schema_pack does.
+      const { readDbSchemaPack } = await import('../schema-pack/best-effort.ts');
+      const dbConfig = await readDbSchemaPack(ctx.engine);
+      const resolved = await loadActivePack({ cfg, remote: ctx.remote ?? true, sourceId: ctx.sourceId, dbConfig });
       manifest = resolved.manifest;
     }
     // File-plane only over MCP; the engine-aware --with-db opt-in is
@@ -152,14 +159,18 @@ const schema_lint: Operation = {
 
 const schema_graph: Operation = {
   name: 'schema_graph',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: schema pack graph as JSON edges. Returns {nodes: [{name, primitive}], edges: [{from, verb, to}]} derived from link_types inference + frontmatter_links.',
   params: {},
   scope: 'read',
   handler: async (ctx) => {
     const { loadActivePack } = await import('../schema-pack/load-active.ts');
     const { loadConfig } = await import('../config.ts');
+    const { readDbSchemaPack } = await import('../schema-pack/best-effort.ts');
     const cfg = loadConfig();
-    const pack = await loadActivePack({ cfg, remote: ctx.remote ?? true, sourceId: ctx.sourceId });
+    // #4653: tier-4 DB-plane schema_pack, same read get_active_schema_pack does.
+    const dbConfig = await readDbSchemaPack(ctx.engine);
+    const pack = await loadActivePack({ cfg, remote: ctx.remote ?? true, sourceId: ctx.sourceId, dbConfig });
     const nodes = pack.manifest.page_types.map((t) => ({ name: t.name, primitive: t.primitive }));
     const edges: Array<{ from: string; verb: string; to: string }> = [];
     for (const lt of pack.manifest.link_types) {
@@ -180,6 +191,7 @@ const schema_graph: Operation = {
 
 const schema_explain_type: Operation = {
   name: 'schema_explain_type',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: resolved settings for a single page_type in the active pack. Returns {pack, type, primitive, path_prefixes, aliases, extractable, expert_routing}.',
   params: {
     type: { type: 'string', required: true, description: 'Page type name to explain' },
@@ -188,8 +200,11 @@ const schema_explain_type: Operation = {
   handler: async (ctx, p) => {
     const { loadActivePack } = await import('../schema-pack/load-active.ts');
     const { loadConfig } = await import('../config.ts');
+    const { readDbSchemaPack } = await import('../schema-pack/best-effort.ts');
     const cfg = loadConfig();
-    const pack = await loadActivePack({ cfg, remote: ctx.remote ?? true, sourceId: ctx.sourceId });
+    // #4653: tier-4 DB-plane schema_pack, same read get_active_schema_pack does.
+    const dbConfig = await readDbSchemaPack(ctx.engine);
+    const pack = await loadActivePack({ cfg, remote: ctx.remote ?? true, sourceId: ctx.sourceId, dbConfig });
     const found = pack.manifest.page_types.find((t) => t.name === p.type);
     if (!found) return { error: 'type_not_found', type: p.type as string, pack: pack.manifest.name };
     return { schema_version: 1, pack: pack.manifest.name, type: found };
@@ -198,6 +213,7 @@ const schema_explain_type: Operation = {
 
 const schema_review_orphans: Operation = {
   name: 'schema_review_orphans',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: list pages with no active-pack type match. Returns {orphan_count, orphans: [{slug, source_id}]}.',
   params: {
     limit: { type: 'number', description: 'Max orphans to return (default 100)' },
@@ -233,6 +249,7 @@ const schema_review_orphans: Operation = {
 
 const schema_apply_mutations: Operation = {
   name: 'schema_apply_mutations',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.7.0: batched schema pack mutation. ATOMIC: every mutation is validated against an in-memory manifest first, and the pack file is written to disk at most once, after the FULL batch has proven valid — so a failure at any point leaves the pack file byte-identical to its pre-batch state (never a partial write). Audit log records one batch_id. Admin scope; NOT localOnly so remote agents (your OpenClaw, etc.) can author packs over normal MCP. Mutation shape per ApplyMutationsRequest type — supports add_type / remove_type / update_type / add_alias / remove_alias / add_prefix / remove_prefix / add_link_type / remove_link_type / set_extractable / set_expert_routing.',
   params: {
     pack: { type: 'string', required: true, description: 'Pack to mutate (must not be bundled)' },
@@ -302,6 +319,7 @@ const schema_apply_mutations: Operation = {
 
 const reload_schema_pack: Operation = {
   name: 'reload_schema_pack',
+  outputRedaction: 'no_stored_text',
   description: 'v0.40.6.0: flush the in-process schema pack cache so the next loadActivePack re-reads from disk. Cascades through extends-chain (codex C6). Admin scope; NOT localOnly. Returns {invalidated: string[]}.',
   params: {
     pack: { type: 'string', description: 'Pack name to invalidate (omit to flush all)' },
