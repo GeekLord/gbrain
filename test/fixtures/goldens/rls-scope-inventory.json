@@ -25,12 +25,12 @@
       },
       "addLinksBatch#default": {
         "flagOffLanes": [
-          "pool"
+          "tx"
         ],
-        "flagOffOpensTransaction": false,
+        "flagOffOpensTransaction": true,
         "flagOn": "unscoped",
         "flagOnLanes": [
-          "pool"
+          "tx"
         ],
         "flagOnScopes": []
       },
@@ -998,9 +998,10 @@
       },
       "getHealth#default": {
         "flagOffLanes": [
-          "pool"
+          "pool",
+          "tx"
         ],
-        "flagOffOpensTransaction": false,
+        "flagOffOpensTransaction": true,
         "flagOn": "scoped",
         "flagOnLanes": [
           "pool",
@@ -1466,6 +1467,28 @@
         ],
         "flagOnScopes": []
       },
+      "getVersions#limit": {
+        "flagOffLanes": [
+          "pool"
+        ],
+        "flagOffOpensTransaction": false,
+        "flagOn": "unscoped",
+        "flagOnLanes": [
+          "pool"
+        ],
+        "flagOnScopes": []
+      },
+      "getVersions#metadataOnly": {
+        "flagOffLanes": [
+          "pool"
+        ],
+        "flagOffOpensTransaction": false,
+        "flagOn": "unscoped",
+        "flagOnLanes": [
+          "pool"
+        ],
+        "flagOnScopes": []
+      },
       "getVersions#sourceId": {
         "flagOffLanes": [
           "pool"
@@ -1768,6 +1791,39 @@
         "flagOnScopes": []
       },
       "listFactsBySession#default": {
+        "flagOffLanes": [
+          "pool"
+        ],
+        "flagOffOpensTransaction": false,
+        "flagOn": "unscoped",
+        "flagOnLanes": [
+          "pool"
+        ],
+        "flagOnScopes": []
+      },
+      "listFactsKeyset#default": {
+        "flagOffLanes": [
+          "pool"
+        ],
+        "flagOffOpensTransaction": false,
+        "flagOn": "unscoped",
+        "flagOnLanes": [
+          "pool"
+        ],
+        "flagOnScopes": []
+      },
+      "listFactsKeyset#keyset": {
+        "flagOffLanes": [
+          "pool"
+        ],
+        "flagOffOpensTransaction": false,
+        "flagOn": "unscoped",
+        "flagOnLanes": [
+          "pool"
+        ],
+        "flagOnScopes": []
+      },
+      "listFactsKeyset#strictTime": {
         "flagOffLanes": [
           "pool"
         ],
@@ -2483,7 +2539,8 @@
       },
       "replaceDerivedLinks#default": {
         "flagOffLanes": [
-          "tx"
+          "tx",
+          "tx>sp"
         ],
         "flagOffOpensTransaction": true,
         "flagOn": "scoped",
@@ -2494,6 +2551,19 @@
         "flagOnScopes": [
           "src-a"
         ]
+      },
+      "replaceDerivedLinksBatch#default": {
+        "flagOffLanes": [
+          "tx",
+          "tx>sp"
+        ],
+        "flagOffOpensTransaction": true,
+        "flagOn": "unscoped",
+        "flagOnLanes": [
+          "tx",
+          "tx>sp"
+        ],
+        "flagOnScopes": []
       },
       "resolveSlugWithAlias#default": {
         "flagOffLanes": [
@@ -2846,6 +2916,7 @@
           "tx"
         ],
         "flagOnScopes": [
+          "src-a",
           "src-a",
           "src-a"
         ]
@@ -3391,6 +3462,7 @@
         "insertFacts": "none",
         "invalidateContentDriftEmbeddings": "none",
         "invalidateStaleSignatureEmbeddings": "none",
+        "jitOffRead": "none",
         "listActiveTakesForPages": "none",
         "listAllPageRefs": "none",
         "listAllSources": "none",
@@ -3402,6 +3474,7 @@
         "listEvalCaptureFailures": "none",
         "listFactsByEntity": "none",
         "listFactsBySession": "none",
+        "listFactsKeyset": "none",
         "listFactsSince": "none",
         "listFilesForPage": "none",
         "listLinkSources": "direct",
@@ -3421,6 +3494,7 @@
         "markPagesExtractedBatch": "none",
         "mergeOntologyFact": "none",
         "migrateFactsToCanonical": "none",
+        "onCheckout": "none",
         "purgeDeletedPages": "none",
         "putContradictionCacheEntry": "none",
         "putDreamVerdict": "none",
@@ -3430,11 +3504,13 @@
         "reconnect": "none",
         "refreshPageBody": "none",
         "registerBeforeDisconnect": "none",
+        "relationalChainHop": "none",
         "relationalFanout": "none",
         "removeLink": "none",
         "removeLinksByPagesAndSource": "none",
         "removeTag": "none",
         "replaceDerivedLinks": "none",
+        "replaceDerivedLinksBatch": "none",
         "resolveAliases": "none",
         "resolveFactsEmbeddingCast": "none",
         "resolveSlugWithAlias": "none",

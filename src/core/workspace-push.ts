@@ -53,7 +53,7 @@ import { OperationError } from './ops/contract.ts';
  */
 
 import {
-  existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
+  existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { createHash, randomBytes } from 'crypto';
@@ -189,7 +189,9 @@ export type PushLockResult =
   | { acquired: false; holderPid: number | null };
 
 export function pushLockDir(repoRoot: string): string {
-  const hash = createHash('sha256').update(repoRoot).digest('hex').slice(0, 16);
+  let canonical = repoRoot;
+  try { canonical = realpathSync(repoRoot); } catch { /* absent or unresolvable: hash the raw path */ }
+  const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
   return join(ensureGbrainHome(), 'locks', `push-${hash}.lock`);
 }
 
@@ -424,6 +426,8 @@ export interface PushStatusEntry {
   reason?: string;
   ahead?: number;
   repoRoot?: string;
+  /** #6083: machine code of a refusal (`writer_coordinator_required` on a managed worktree). */
+  code?: string;
   /** Absolute path of the status file (per-root announce-state keying). */
   file: string;
 }
@@ -493,6 +497,21 @@ export function readPushStatusForRoot(root: string): PushStatusEntry | null {
     /* fall through to the scan */
   }
   return readPushStatuses().find((e) => e.repoRoot === root) ?? null;
+}
+
+/**
+ * #5432: the push-status record that belongs to workspace `ws`, or null. A
+ * record matches by its repoRoot (symlinks resolved on both sides); a single
+ * legacy record with no repoRoot is attributed to `ws`. Another root's record
+ * is never reported as this workspace's push state.
+ */
+export function pushStatusForWorkspace(entries: readonly PushStatusEntry[], ws: string): PushStatusEntry | null {
+  // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- comparison only: normalizes the operator's own push-status repoRoot and workspace path to compare them; nothing is read or written at the resolved path
+  const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  const target = real(ws);
+  const own = entries.find((e) => e.repoRoot !== undefined && real(e.repoRoot) === target);
+  if (own) return own;
+  return entries.length === 1 && entries[0]!.repoRoot === undefined ? entries[0]! : null;
 }
 
 /** One aggregation for every status surface (SessionStart note, doctor,
@@ -618,7 +637,7 @@ export function summarizePushStatuses(entries: PushStatusEntry[]): {
 }
 
 function writePushStatus(
-  status: { ts: string; ok: boolean; reason?: string; ahead?: number; repoRoot: string },
+  status: { ts: string; ok: boolean; reason?: string; ahead?: number; repoRoot: string; code?: string },
 ): void {
   try {
     const p = pushStatusPathForRoot(status.repoRoot);
@@ -660,7 +679,7 @@ export async function workspacePush(opts: WorkspacePushOpts): Promise<WorkspaceP
     // No lock winner can be in flight here: the same guard refuses every legacy
     // push of this root.
     if (root && e instanceof OperationError) {
-      writePushStatus({ ts: new Date().toISOString(), ok: false, reason: `${e.code}: ${e.message}`, repoRoot: root });
+      writePushStatus({ ts: new Date().toISOString(), ok: false, code: e.code, reason: `${e.code}: ${e.message}`, repoRoot: root });
     }
     throw e;
   }

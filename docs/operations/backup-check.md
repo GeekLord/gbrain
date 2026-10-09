@@ -11,8 +11,9 @@ proof that a whole brain could be restored.
 |---|---|---|
 | Source repos (every non-archived source with a `local_path`) | Local Git discovery, deduped by root and capped at 500 roots/run; trusted local read-only `git ls-remote` verifies clean HEAD against the remote | No configured origin, dirty/unpushed work, missing/mismatched remote HEAD, stale/unknown evidence, or failed push without newer matching readback cannot count as verified recovery. |
 | Bootstrap workspace (skills/, memory/, brain/, identity) | file plane: the install receipt's `repo_url` + the per-root push-status files | receipt without `repo_url` → warn; a failing background push → flagged row only (the push-failure banner owns that alarm) |
+| Google / GitHub connector sources | persistence mode and worktree binding | none on its own: a managed unbound source (`connector_database`) and an unmanaged source whose directory is missing or not a Git repo are `connector` info rows. A bound connector, or one whose directory is a Git repo, is checked as a source repo. |
 | DB-only brain (pages exist, nothing git-backed) | page count + absence of any git-backed asset | warn on PGLite (local disk loss risks these pages); info on Postgres (database placement and external backup are unverified) |
-| `db_only` storage-tier pages | `gbrain.yml` per source | info row — dump with `gbrain export --dir <backup-dir>` to somewhere OUTSIDE the gitignored dirs (`--restore-only` is the wrong direction for a backup) |
+| `db_only` storage-tier pages | `gbrain.yml` per source | info row: dump with `gbrain export --source <id> --dir BACKUP_DIR/<id>` (replace `BACKUP_DIR` with a durable backup directory) to somewhere OUTSIDE the gitignored dirs (`--restore-only` is the wrong direction for a backup) |
 | Harness-native skill dirs (e.g. the agent's installed skills) | skillpack bridge state | info only — these are installed COPIES; the originals live in repos |
 
 `configured_repos` records configuration; the legacy `recoverable_repos` field
@@ -187,9 +188,21 @@ source id. Full per-asset detail (which repo, which fix) is local-only:
 - A source repo with no remote:
   `git remote add origin git@github.com:you/your-brain-repo.git && git push -u origin main`,
   then `gbrain sources harden <source-id>` for auto-push durability.
-- Unpushed workspace work: `gbrain sources push --path <workspace>`.
-- db_only pages: `gbrain export --dir <backup-dir>` (store the dump outside
-  the gitignored dirs — another disk, another repo, anywhere durable).
+- Unpushed workspace work: for a managed canonical worktree, inspect the managed writer with `gbrain sources writer status --probe --json` (legacy bulk push is refused there); otherwise `gbrain sources push --path <workspace>`.
+  On a managed worktree the persistence coordinator commits and pushes as Git effects; the probe lists `effects`, `blocking_effects` and `recent_failures`, and a parked push is retried with `gbrain sources writer retry-effects <source> --request-id <id>`. gbrain's own ownership stamp (`.gbrain-owner.json`) never counts as uncommitted work, the session hooks never start `sources push` there, and a root with no `origin` remote reads `no_remote` (add one: `git remote add origin <url>`) even after a recorded push refusal. A recorded push failure stops warning once the tree matches its origin branch with nothing uncommitted.
+- db_only pages: `gbrain export --source <id> --dir BACKUP_DIR/<id>` for
+  each source the row names, with `BACKUP_DIR` replaced by a directory
+  outside the gitignored dirs (another disk, another repo, anywhere durable). One directory per source:
+  an unscoped export refuses when two sources share a slug.
+- A dirty source repo (uncommitted changes): `gbrain sources push <source-id>`
+  (secret-scanned commit and push), or discard the changes, then run
+  `gbrain backup check`. Remote evidence is only read for a clean tree.
+- Google or GitHub connector sources without a Git-backed directory (managed
+  and unbound, or unmanaged with a missing or non-Git directory): they appear
+  as `connector` info rows and do not keep the check in warn. Their pages come
+  from the provider API, so recovery is `gbrain sync --source <id> --full`,
+  within the source's configured history window. A bound connector, or one
+  whose directory is a Git repo, follows the source-repo recipes above.
 
 ## Recovery drill (prove the answer is real)
 
