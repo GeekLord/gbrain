@@ -531,6 +531,10 @@
       },
       {
         "category": "brain",
+        "name": "atom_retirements_restorable"
+      },
+      {
+        "category": "brain",
         "name": "extractor_facts_expired"
       },
       {
@@ -672,6 +676,10 @@
       {
         "category": "ops",
         "name": "global_maintenance_timeouts"
+      },
+      {
+        "category": "ops",
+        "name": "global_maintenance_stalled"
       },
       {
         "category": "ops",
@@ -860,6 +868,10 @@
       {
         "category": "brain",
         "name": "ghost_pages"
+      },
+      {
+        "category": "brain",
+        "name": "origin_twins"
       },
       {
         "category": "brain",
