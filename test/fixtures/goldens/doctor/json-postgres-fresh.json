@@ -1312,6 +1312,7 @@
             "preparation_policy": {
               "maintenance_preparation_ms": "<volatile>",
               "max_preparation_attempts": 2,
+              "max_transient_retries": 5,
               "preparation_ceiling_ms": "<volatile>",
               "sync_preparation_ms": "<volatile>"
             },
@@ -2095,6 +2096,7 @@
               "no_remote": 0,
               "pages_at_risk": 0,
               "recoverable_repos": 0,
+              "remote_timeouts": 0,
               "unpushed": 0
             }
           },
@@ -3344,7 +3346,7 @@
         {
           "category": "meta",
           "elapsed_ms": "<volatile>",
-          "message": "Active pack gbrain-base-v2@1.4.0+1c5ba903 is current (no successor declared)",
+          "message": "Active pack gbrain-base-v2@1.5.0+4604112a is current (no successor declared)",
           "name": "pack_upgrade_available",
           "status": "ok"
         },
