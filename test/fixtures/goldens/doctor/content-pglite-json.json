@@ -660,6 +660,20 @@
         {
           "category": "ops",
           "details": {
+            "age_seconds": null,
+            "docs": "docs/guides/error-codes.md#sync_admission_restricted",
+            "set_at": null,
+            "stored": null,
+            "value": "normal"
+          },
+          "elapsed_ms": "<volatile>",
+          "message": "sync.admission is normal: managed sync admits everything it classifies.",
+          "name": "sync_admission_restricted",
+          "status": "ok"
+        },
+        {
+          "category": "ops",
+          "details": {
             "docs": "docs/guides/repair.md#receipt-compaction",
             "last_compaction": {
               "at": "<ts>",
@@ -975,14 +989,14 @@
         {
           "category": "meta",
           "elapsed_ms": "<volatile>",
-          "message": "1258 column(s) verified against live schema",
+          "message": "1296 column(s) verified against live schema",
           "name": "schema_columns",
           "status": "ok"
         },
         {
           "category": "meta",
           "elapsed_ms": "<volatile>",
-          "message": "All 149 table(s) the applied migrations create exist.",
+          "message": "All 152 table(s) the applied migrations create exist.",
           "name": "schema_missing_tables",
           "status": "ok"
         },
@@ -1627,6 +1641,18 @@
           "status": "ok"
         },
         {
+          "category": "ops",
+          "details": {
+            "count": 0,
+            "docs": "docs/guides/google-connect.md#api-access",
+            "sources": []
+          },
+          "elapsed_ms": "<volatile>",
+          "message": "No Google source recorded a disabled API or missing scope at its last sync.",
+          "name": "google_api_access",
+          "status": "ok"
+        },
+        {
           "category": "brain",
           "details": {
             "by_source": [],
@@ -1700,6 +1726,18 @@
           "elapsed_ms": "<volatile>",
           "message": "No active fact from a gbrain self-capture or paste candidate remains. This counts facts in the database; the self_capture check counts corpus files.",
           "name": "captured_facts_active",
+          "status": "ok"
+        },
+        {
+          "category": "brain",
+          "details": {
+            "affected": 0,
+            "docs": "docs/guides/repair.md#redacted-facts",
+            "repair": "redacted-facts"
+          },
+          "elapsed_ms": "<volatile>",
+          "message": "No active fact holds a redaction marker.",
+          "name": "facts_redaction_marker",
           "status": "ok"
         },
         {
@@ -2075,6 +2113,18 @@
         },
         {
           "category": "ops",
+          "details": {
+            "code": "content_drift_sweep",
+            "docs": "docs/guides/troubleshooting.md#content-drift-sweep",
+            "scopes": []
+          },
+          "elapsed_ms": "<volatile>",
+          "message": "The content-drift sweep has not run yet; it runs inside embed --stale and the embed jobs.",
+          "name": "content_drift_sweep",
+          "status": "ok"
+        },
+        {
+          "category": "ops",
           "elapsed_ms": "<volatile>",
           "message": "No connector source is waiting for its account to be repinned.",
           "name": "connector_account_mismatch",
@@ -2424,6 +2474,36 @@
           "elapsed_ms": "<volatile>",
           "message": "No commit→searchable samples in the last 24 h (no managed sync imported a new commit).",
           "name": "managed_sync_latency",
+          "status": "ok"
+        },
+        {
+          "category": "brain",
+          "details": {
+            "docs": "docs/guides/on-commit-sync.md",
+            "sources": [
+              {
+                "pending_markers": 0,
+                "reason": null,
+                "resident": null,
+                "source_id": "default",
+                "stalled": false,
+                "state": null
+              },
+              {
+                "pending_markers": 0,
+                "reason": null,
+                "resident": null,
+                "source_id": "notes",
+                "stalled": false,
+                "state": null
+              }
+            ],
+            "sync_on_commit": false
+          },
+          "elapsed_ms": "<volatile>",
+          "message": "sync.on_commit is off; residents still run explicit sync requests. notifier for default: none running; idle; notifier for notes: none running; idle.",
+          "name": "commit_notifier",
+          "severity": "info",
           "status": "ok"
         },
         {

@@ -10,7 +10,7 @@
  *   --vms N            VMs to provision in parallel (default: burst-sized from
  *                      `ubi-runner.sh usage`; 4 when the quota is busy)
  *   --size SIZE        Ubicloud size (default standard-16)
- *   --slots N          concurrent work slots per VM (default: half of --size's vCPUs)
+ *   --slots N          concurrent work slots per VM (default: three per eight of --size's vCPUs)
  *   --location LOC     Ubicloud location (default eu-central-h1). A full gate
  *                      runs only there; another location needs --lanes and
  *                      is a diagnostic run, never gate evidence
@@ -18,6 +18,12 @@
  *                      gbrain-ci@latest is the prebaked machine image
  *                      scripts/ubicloud/build-ci-image.sh builds
  *   --lanes a,b        subset of gitleaks,verify,serial,slow,unit,pg-arms,e2e (default all)
+ *   --pg-image IMAGE   Postgres server image of every slot (default
+ *                      pgvector/pgvector:pg16). Another image needs --lanes and
+ *                      is a diagnostic run, never gate evidence: run
+ *                      --lanes pg-arms,e2e --pg-image pgvector/pgvector:pg15 to
+ *                      audit Postgres 15 (#7112); the catalog goldens hold
+ *                      Postgres 16 output and fail on 15 by design
  *   --diff             doc-only diffs run only the doc checks and gitleaks (ci:local --diff)
  *   --record-weights   write measured durations to scripts/ubicloud/weights.json
  *   --keep             leave the VMs running (destroy with ubi-runner.sh down NAME)
@@ -116,6 +122,8 @@ interface Opts {
   /** A machine image (NAME@VERSION) or "stock". */
   image: string;
   lanes: Set<string>;
+  /** The Postgres server image of every slot; empty keeps setup-ci-vm.sh's default. */
+  pgImage: string;
   diff: boolean;
   recordWeights: boolean;
   keep: boolean;
@@ -130,6 +138,7 @@ function parseArgs(argv: string[]): Opts {
     location: GATE_LOCATION,
     image: process.env.UBI_CI_IMAGE || "stock",
     lanes: new Set(ALL_LANES),
+    pgImage: "",
     diff: false,
     recordWeights: false,
     keep: false,
@@ -148,6 +157,7 @@ function parseArgs(argv: string[]): Opts {
     else if (arg === "--location") opts.location = value();
     else if (arg === "--image") opts.image = value();
     else if (arg === "--lanes") opts.lanes = new Set(value().split(","));
+    else if (arg === "--pg-image") opts.pgImage = value();
     else if (arg === "--diff") opts.diff = true;
     else if (arg === "--record-weights") opts.recordWeights = true;
     else if (arg === "--keep") opts.keep = true;
@@ -156,19 +166,22 @@ function parseArgs(argv: string[]): Opts {
   }
   for (const lane of opts.lanes) if (!(ALL_LANES as readonly string[]).includes(lane)) usage(`unknown lane ${lane}`);
   if (opts.location !== GATE_LOCATION && !argv.includes("--lanes")) usage(`a full gate runs only in ${GATE_LOCATION}. Test timeouts and the mined shard weights are calibrated there; on 2026-10-19 us-east-a2 ran about half as fast and timed out tests that pass in ${GATE_LOCATION}, so a full run in ${opts.location} is not gate evidence. Wait for ${GATE_LOCATION} capacity or run bun run ci:local (and report it as local). To run a diagnostic subset in ${opts.location}, pass --lanes.`);
+  if (opts.pgImage && !/^[a-z0-9][a-z0-9._\/-]*(?::[A-Za-z0-9._-]+)?$/.test(opts.pgImage)) usage(`--pg-image ${opts.pgImage} is not an image reference`);
+  if (opts.pgImage && !argv.includes("--lanes")) usage("a full gate runs on the default Postgres image; --pg-image is a diagnostic run, so pass --lanes (for example --lanes pg-arms,e2e).");
   if (!Number.isInteger(opts.ttlHours) || opts.ttlHours < 0 || opts.ttlHours > 8760) usage("--ttl-hours must be a whole number of hours from 0 (no expiry) to 8760");
   if (!Number.isInteger(opts.vms) || opts.vms < 0 || (opts.vms === 0 && argv.includes("--vms"))) usage("--vms must be a positive integer");
-  // One slot per two vCPUs: the whole corpus still fits inside the longest
-  // single file's runtime at the default fleet size, and the headroom keeps
-  // timing-sensitive files (and that longest file) from starving for CPU.
-  if (!opts.slots) opts.slots = Math.max(1, Math.round(vcpusOf(opts.size) / 2));
+  // Three slots per eight vCPUs: each slot's bun process, its children and its
+  // own PostgreSQL and PgBouncer keep about 2.5 threads runnable. One slot per
+  // two vCPUs measured a 1-minute load of 1.11 per vCPU at p50 and 1.39 at p90
+  // and timed out a file that passes at this density (0.79 p50, 0.95 p90).
+  if (!opts.slots) opts.slots = Math.max(1, Math.floor((vcpusOf(opts.size) * 3) / 8));
   if (!Number.isInteger(opts.slots) || opts.slots < 1) usage("--slots must be a positive integer");
   return opts;
 }
 
 function usage(message: string): never {
   console.error(`ci-ubicloud: ${message}`);
-  console.error("usage: bun run scripts/ci-ubicloud.ts [--vms N] [--size SIZE] [--slots N] [--location LOC] [--image IMAGE] [--lanes a,b] [--diff] [--record-weights] [--keep] [--ttl-hours N]");
+  console.error("usage: bun run scripts/ci-ubicloud.ts [--vms N] [--size SIZE] [--slots N] [--location LOC] [--image IMAGE] [--lanes a,b] [--pg-image IMAGE] [--diff] [--record-weights] [--keep] [--ttl-hours N]");
   process.exit(2);
 }
 
@@ -477,7 +490,7 @@ async function main() {
     vm.state = "setup";
     // System packages, Bun and image pulls need no checkout: setup starts now
     // and waits for the marker the upload writes when it lands.
-    const env = `SLOTS=${opts.slots} BUN_VERSION=${quote(bunVersion)} GITLEAKS=${opts.lanes.has("gitleaks") ? 1 : 0} CHECKOUT=${REMOTE_DIR} CHECKOUT_MARKER=${UNPACKED_MARKER}`;
+    const env = `SLOTS=${opts.slots} BUN_VERSION=${quote(bunVersion)} GITLEAKS=${opts.lanes.has("gitleaks") ? 1 : 0} CHECKOUT=${REMOTE_DIR} CHECKOUT_MARKER=${UNPACKED_MARKER}${opts.pgImage ? ` PG_IMAGE=${quote(opts.pgImage)}` : ""}`;
     const setupRun = runner(["ssh", vm.name, `${env} bash -s`], { input: SETUP_SCRIPT, out: `${setupLog}.bootstrap`, timeoutMs: 15 * 60 * 1000 });
     const pack = await packed;
     if (pack.code !== 0) throw new Error(`packing the checkout failed: ${pack.stdout.trim().split("\n").slice(-3).join(" | ")}`);
@@ -544,6 +557,12 @@ async function main() {
   const ready = vms.filter((vm) => vm.setupMs !== undefined);
   console.log(`  VMs: ${ready.length}/${opts.vms} ready${ready.length ? `, setup ${Math.round(Math.min(...ready.map((v) => v.setupMs!)) / 1000)}-${Math.round(Math.max(...ready.map((v) => v.setupMs!)) / 1000)}s` : ""}`);
   console.log(`  wall ${Math.round(wallMs / 1000)}s, ${Math.round(computeMs / 1000)}s of test compute`);
+  const loads = all.flatMap((r) => (r.load === undefined ? [] : [r.load])).sort((a, b) => a - b);
+  if (loads.length) {
+    const at = (q: number) => loads[Math.min(loads.length - 1, Math.floor(q * loads.length))]!.toFixed(2);
+    console.log(`  VM load (1-minute load average per vCPU as each item ended, ${opts.slots} slots per VM): p50 ${at(0.5)}, p90 ${at(0.9)}, max ${at(1)}`);
+    if (Number(at(0.9)) > 1.1) console.log(`  WARNING: VMs ran oversubscribed (p90 ${at(0.9)} runnable per vCPU), so timing-sensitive tests ran slower than the weights and file caps assume. Lower --slots.`);
+  }
   console.log("  slowest items:");
   for (const r of [...all].sort((a, b) => b.ms - a.ms).slice(0, 8)) console.log(`    ${Math.round(r.ms / 1000)}s ${r.lane} ${r.file}`);
 

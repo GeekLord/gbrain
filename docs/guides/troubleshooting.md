@@ -25,6 +25,7 @@
 | Facts extraction or embedding reports `(cause=AIConfigError model_not_found)` or `gbrain models doctor` says `model_not_found` while the key is valid | the provider refused the model, not the key (a 404, or a 403 "project does not have access to model"): the fix text names the config key that selected the model when the gateway knows it ("Selected via models.tier.reasoning. Fix: gbrain config set …"; an env var or config.json pin says what to clear); otherwise check the model id with `gbrain models`, enable the model for the project in the provider console or set another model (`gbrain config set models.facts <provider:model>`) | user (provider console); agent for the config change, after the user agrees | none | `gbrain models doctor` reports the model `ok` |
 | Doctor `links_extraction_lag` or sync says "N page(s) have un-extracted edges" | `gbrain extract --stale --dry-run --json`, then on the host `gbrain extract --stale --catch-up [--source-id <id>]` | user above 120 s, else agent | none | dry run: `actionable: 0` |
 | Doctor `links_extraction_lag` says "N page(s) failed link extraction 3 runs in a row and are held", or `extract --stale` lists failed pages | Read each page's code (`unknown_source`: the page's source row is gone; restore the source or delete the page), fix the cause, then `gbrain extract --stale [--source-id <id>] --retry-held` | agent | none | `gbrain extract --stale --dry-run --json`: `held: 0` |
+| `gbrain apply-migrations --yes` or `gbrain upgrade` stops with `Migration <N> … exhausted retries` / SQLSTATE 57014 and the schema stays behind (`migrations_pending`, reason `still_behind`) | upgrade first (#7108: long backfills run in committed batches), then follow the error's or doctor `schema_version`'s `fix` ([migration statement timeout](#migration-statement-timeout)) | agent; a longer `--statement-timeout` or ending a session only after the user agrees | none for a rerun | `gbrain doctor --only schema_version --json` |
 | A gbrain call failed with a code you don't recognize | follow `fix.next` ([protocol](../protocol/AGENT_OPERATOR_v1.md)); `gbrain errors <code>` | agent | as the fix's `consent` | the fix's `verify` |
 | A graph read omits a relationship you know existed, or says someone still works somewhere they left | the default read returns relationships true today: repeat with `status: "all"` or `as_of`; to record an end, add a dated timeline line (`Ended works_at [[companies/x]]`) or `add_link ... valid_until` ([temporal edges](temporal-edges.md)) | agent | none | `gbrain doctor --only edge_validity --json` |
 | A command exited 3 (`confirmation_required`) | relay `user_message`; run `fix.command` only after the user agrees | agent, after the user agrees | the payload's `effects` | the fix's `verify` |
@@ -60,6 +61,7 @@
 | [`gbrain repair fences` skipped a file `sync_in_progress` while a sync runs](repair.md#fence-repair-during-a-sync) | nothing: a write in flight or the running sync's frozen manifest still names that file; every other candidate repairs now and the next run picks this one up (`gbrain sync --source <id> --no-pull` finishes the sync) | agent | none | `gbrain doctor --only fence_integrity --json` |
 | [A Google or GitHub item is held (`connector_held_items`)](#held-connector-items) | `gbrain sources status <id>`, fix the cause, then `gbrain sources retry-held <id>` and `gbrain sync --source <id>` | agent, after the user agrees | `egress` (fetches from the provider again) | `gbrain doctor --only connector_held_items --json` |
 | `gbrain google status` exits 1 naming `calendar_unreadable`, doctor warns `google_calendar_readable`, or the sync log prints `[google] calendar_unreadable` (calendar pages stop arriving) | `gbrain google calendars --account <email>` lists the calendars the account can read; then `gbrain sources set-calendar <source> <calendar-id>` and `gbrain sync --source <source>` ([unreadable calendar](google-connect.md#unreadable-calendar)) | agent, after the user agrees which calendar | none (on a managed brain whose source also syncs Gmail or Contacts, the change re-reads their history: `confirmation_required`, re-run with `--yes` after the user agrees) | `gbrain doctor --only google_calendar_readable --json` is ok |
+| `gbrain google setup` stops with `api_access_blocked`, `gbrain google status` exits 1 listing `api_access.problems`, or doctor warns `google_api_access` (a Google API disabled for the OAuth project, or a scope not granted) | enable each API at the link the report names (the Google Cloud project is in the report), or `gbrain google connect --reauth <email>` for a missing scope; then `gbrain sync --source <source>` ([API access](google-connect.md#api-access)) | user (only the project owner can enable an API) | none | `gbrain google status --json` shows no `api_access.problems` |
 | `gbrain waiting` lists bank, payment or shipping alerts as people waiting on you | upgrade (#5012: mail with `Precedence: bulk/list/junk`, a `List-Id` or a no-reply `Reply-To` opens no reply-owed loop); for loops opened before the upgrade, `gbrain waiting` prints `gbrain loops drop sender <email> --source <id> --dry-run` per sender; preview, then run it without `--dry-run` (cannot be undone), or `gbrain loops mute sender <email>` for a reversible stop ([open loops](open-loops.md#the-surfaces)) | agent, after the user agrees | none to preview | `gbrain waiting --json` no longer lists the sender |
 | [`gbrain migrate --to` refused with `writer_coordinator_required`](../ENGINES.md#engine-migration-refused) | follow the refusal's `fix`: relay its `user_message` (stay on PGLite and share with `gbrain mcp expose`, or leave the brain as it is) | agent, after the user agrees | `persistent_install`, `egress` (for `gbrain mcp expose`) | `gbrain doctor --no-migrate --json` |
 | [A write was refused with a named reason](#write-refused) | the reason's recovery in [write refusal reasons](write-refusals.md) | as the refusal's `fix` | as the refusal's `fix` | the refusal's `verify` |
@@ -155,7 +157,7 @@ Turning the `preparation_deadlines` switch off (`gbrain config set persistence.p
 
 <a id="session-timeouts-not-applied"></a>**Doctor warns `persistence_session_timeouts` with `session_timeouts_not_applied`?** gbrain sets `statement_timeout` (`GBRAIN_STATEMENT_TIMEOUT`, default 5min) and `idle_in_transaction_session_timeout` as connection startup parameters, and a transaction-mode pooler (PgBouncer with `ignore_startup_parameters`, Supavisor) drops them: `SHOW statement_timeout` through the configured URL reads `0`, so a statement outside a transaction has no server-side bound and a relation lock held in another session (a migration's `ALTER TABLE pages` queued behind a long transaction, for example) holds it for as long as the lock lasts. Managed write *preparation* reads are not affected since v0.60.108: they run under a transaction-local `statement_timeout` of the write's remaining preparation budget, so a lock-blocked read ends at the budget and the member is released `preparation_deadline` with no statement left on the server (#6278). For every other autocommit statement, set the default on the role instead of the connection: `ALTER ROLE <gbrain role> SET statement_timeout = '5min'` (read-only to check: `gbrain doctor --only persistence_session_timeouts --json`). Setting `GBRAIN_STATEMENT_TIMEOUT` has no effect through such a pooler.
 
-<a id="managed-sync-blocked"></a>**A managed sync run is blocked (doctor `managed_sync_blocked`, a freshness `sync` job ended `dead`, or get_brain_health reports `sync_blocked`)?** The source's unfinished run stopped on a page request that did not commit and recorded the stop, so it resumes nothing by itself while the other sources keep syncing (#6858: one source stopped for 21 hours while every freshness job reported `completed`). Such a job now ends `dead`: its error names the stop and the run's `next` command, and `gbrain jobs get <id> --json` carries `outcome`, `drain` and `next` in its progress. Doctor warns as soon as a run is blocked and fails once it has been blocked for more than an hour; get_brain_health turns to `attention` past the same hour, with a count band and no source names. Run `gbrain sync status --source <id> --json` (read-only): it names the page, its fault class and its exit. Clear the cause it names and run the step it prints; the next freshness job resumes the run once the cause is gone. A page publication that `gbrain repair stuck-recovery --keep disk` abandoned is not a blocker: the next plain sync retries that page after the rest of its run, imports it when the kept file is committed, and holds it `worktree_dirty` otherwise.
+<a id="managed-sync-blocked"></a>**A managed sync run is blocked (doctor `managed_sync_blocked`, a freshness `sync` job ended `dead`, or get_brain_health reports `sync_blocked`)?** The source's unfinished run stopped on a page request that did not commit and recorded the stop, so it resumes nothing by itself while the other sources keep syncing (#6858: one source stopped for 21 hours while every freshness job reported `completed`). Such a job now ends `dead`: its error names the stop and the run's `next` command, and `gbrain jobs get <id> --json` carries `outcome`, `drain` and `next` in its progress. Doctor warns as soon as a run is blocked and fails once it has been blocked for more than an hour; get_brain_health turns to `attention` past the same hour, with a count band and no source names. A sync pass that stopped before it finished (in discovery, path `<discovery>`, or on one file) counts as blocked too, until a later sync of the source succeeds. Run `gbrain sync status --source <id> --json` (read-only): it names the page, its fault class and its exit. Clear the cause it names and run the step it prints; the next freshness job resumes the run once the cause is gone. A page publication that `gbrain repair stuck-recovery --keep disk` abandoned is not a blocker: the next plain sync retries that page after the rest of its run, imports it when the kept file is committed, and holds it `worktree_dirty` otherwise.
 
 <a id="managed-sync-not-moving"></a>**The catch-up is parked (`sources status --json` says `data_moving: false`, doctor warns `managed_sync_not_moving`, `gbrain sources writer movement` exited 1), or the drain stopped `drain_stalled` with `cause: owner_wedged_here`?** Liveness is not movement: `/health` can be ok, the pid alive and `sync_running: true` while no page has committed for weeks. A managed source is *not moving* when an unfinished `managed-sync` cursor has had neither a committed `managed_sync_*` receipt nor a head step advance for longer than `persistence.preparation_ceiling_ms` (600 s) while a drain or a full consumer is live on the owner host; with nothing live it is `movement_state: parked` (a cursor left between cron runs; informational, not scored). A parked cursor whose write queue still holds admitted requests while no consumer runs and nothing has moved for longer than that ceiling is stranded: nothing will ever drain it, so doctor `managed_sync_not_moving` fails (#6552, #6712 PR 2) and its fix is the resume sync with the cursor's stored options (`gbrain sync --source <id> …`), which consumes the queue itself; `details.stranded` counts such sources. When the sync backlog itself cannot be read, every surface says `movement_state: unknown` (`unknown.reason: backlog_read_failed`) instead of `nothing_pending`: doctor warns with `details.health: unknown`, `sources status` prints a `movement UNKNOWN` line, and `gbrain sources writer movement` exits 1 with code `movement_unknown` (`--warn-only` exits 0); rerun the movement command, and run `gbrain doctor --json` if the read keeps failing. Every surface routes to the same two read-only calls, so the agent reaches the owner, the step and the next action without SQL:
 
@@ -553,6 +555,76 @@ since the previous timeout, last timeout time), never one per search, and
 `details.negative_cache`. Postgres only: PGLite has no keyword statement
 timeout.
 
+## Migration statement timeout
+
+<a id="migration-statement-timeout"></a>
+
+**Symptom.** `gbrain apply-migrations --yes` (or `gbrain upgrade`) prints
+`Migration <N> (<name>) exhausted retries` or `hit statement_timeout (SQLSTATE
+57014)`, exits 1 with `migrations_pending` (reason `still_behind`), and the
+schema stays below head. Doctor's `schema_version` check names the migration.
+
+**Why.** Each migration's SQL runs in one transaction under a 10-minute
+statement budget, which overrides a lower server default (Supabase enforces
+about 2 minutes). A lock wait stops much sooner, at the schema lock timeout
+(`schema_lock_blocked`), so a statement timeout means the migration's own work
+outlasted the budget. Every attempt then rolls back.
+
+**What gbrain does about it.** Before some published migrations, gbrain runs
+their backfill in committed batches of 5,000 rows, using the migration's own
+predicate. An interrupted run keeps every committed batch, and
+`gbrain apply-migrations --yes` continues from the rows still left. The
+published migration then runs unchanged and has little or nothing left to
+write.
+
+| Migration | Done in batches first |
+|---|---|
+| v011 `links_provenance_columns` | `link_source = 'markdown'` on legacy links |
+| v028 `cathedral_ii_chunk_fts_backfill` | chunk keyword vectors |
+| v033 `admin_dashboard_columns_v0_26_3` | request-log agent names. A row with no token resolves to NULL, so the migration still rewrites those rows itself. |
+| v116 `code_edges_source_backfill_and_callee_index` | `source_id` on code edges |
+| v161 `index_pending_text_projections` | its partial pages index, built concurrently under the migration statement budget (Postgres), because the migration caps its own build at 30 seconds |
+| v221 `chunk_embedding_pending_since` | `embedding_pending_since` on chunks without a vector, with the same active-column choice and `embedding_pending_since_backfilled_at` provenance (#7108) |
+
+The other migrations whose work grows with a table are either bounded
+differently or can't be split without editing a published migration:
+
+- v153 rewrites every page row and queues one projection job per live page. It
+  grows with the page count, not the chunk count.
+- v189 scans page bodies for private-key markers. The scan only reads, and it
+  writes only the matching pages.
+- v123's handler rewrites keyword vectors only when the configured keyword
+  language changes. It runs outside the migration transaction.
+- Index builds and constraint validations inside a migration (v011's unique
+  constraint, v174, v226 and similar) are single statements that can't be
+  split. Apart from the build itself, they only read.
+- v160 (ANALYZE samples `pages`), v200 (a partial index on `op_checkpoints`)
+  and v234 (a column on `persistence_host_bindings`) cap themselves at 30
+  seconds. They touch a sample, a small table or only the catalog.
+
+**When it still happens.** gbrain records the timed-out migration (config
+`schema_migration_timeout`, deleted once a run reaches head). Apply-migrations
+and doctor then name it and give the fix for the case:
+
+1. **This release batches a migration that timed out without batching.** Run
+   `gbrain apply-migrations --yes`.
+2. **Idle-in-transaction sessions were open.** They may hold locks on the
+   table. Check them with `gbrain doctor --locks`. With the user's agreement,
+   end the ones that are still open on the database host
+   (`SELECT pg_terminate_backend(<pid>)`), then run
+   `gbrain apply-migrations --yes`.
+3. **No idle session was seen.** A plain rerun fails the same way. With the
+   user's agreement, run it once with a longer budget:
+   `gbrain apply-migrations --yes --statement-timeout 120` (whole minutes;
+   `0` removes the limit). While it runs, the migration holds its table locks,
+   so writes to that table wait. Please also report it, so the migration can be
+   batched.
+
+`--statement-timeout` is operator-only and applies to that run only. It sets
+the budget for migration SQL and for the batches above. It doesn't lift the
+30-second caps that v160, v200 and v234 set on themselves, or the timeouts of
+migration handlers.
+
 ## Global maintenance timeouts
 
 **Doctor warns `global_maintenance_timeouts`, or late maintenance phases
@@ -613,6 +685,36 @@ the phase, its blocker key and back-off, or the last failed job.
    streak, and a phase that fails for a different reason starts a new one.
 3. Confirm with `gbrain doctor --only global_maintenance_stalled`: it is `ok`
    after a pass completes with the phase passing.
+
+## Content-drift sweep
+
+**Doctor reports `content_drift_sweep` as a warning, or an embed run prints
+`content-drift sweep ... FAILED`?** Every `embed --stale` run, embed job and
+embed-backfill job runs the content-drift sweep: it re-queues chunks whose text
+changed after their vector was computed (`embedded_text_hash` no longer
+matches `md5(chunk_text)`). The sweep examines 5,000 chunk rows per statement
+in id order and commits its cursor with each batch, in the config row
+`embed.content_drift_sweep.<column>.<scope>`, so a pass spans as many runs as
+it needs; one run sweeps for at most 60 seconds. After a pass completes, the
+next starts once `embed.content_drift.pass_interval_hours` have passed (24 by
+default; 0 repeats it every run). A pass that fits in one batch repeats on
+every run. The run's result carries `content_drift` (`contentDrift` on
+embed-backfill): rows checked and invalidated, the cursor, and `state`
+(`complete`, `partial`, `waiting`, `stopped`, `failed`, or `unsupported`
+on a schema before migration v133).
+
+A failed batch commits nothing and leaves the cursor before it; the embed run
+goes on with the rest of its work and the next run retries the batch. Search
+already ignores a vector whose text changed, so a stalled sweep delays
+re-embedding, not answers.
+
+1. Read the error: `gbrain doctor --only content_drift_sweep --json` names the
+   scope, the chunk id and the message.
+2. Fix what it names (a lock held by another session, a statement timeout far
+   below one batch, a database error), then run `gbrain embed --stale`. It
+   spends embedding tokens, so ask the user first.
+3. Confirm with `gbrain doctor --only content_drift_sweep`: it is `ok` once a
+   batch commits.
 
 ## auto_chronicle has no effect
 

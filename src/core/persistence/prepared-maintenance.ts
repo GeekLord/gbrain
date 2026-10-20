@@ -502,6 +502,7 @@ async function prepareMaintenanceKind(engine: BrainEngine, row: WriteRequest, co
   enterClaimStep(clock, 'maintenance_dispatch');
   if (row.intent?.kind === 'managed_maintenance_restore_extractor_facts') return (await import('../repair/extractor-facts.ts')).prepareExtractorFactsRestore(engine, row);
   if (row.intent?.kind === 'managed_maintenance_expire_captured_facts') return (await import('../repair/captured-facts.ts')).prepareCapturedFactsExpiry(engine, row);
+  if (row.intent?.kind === 'managed_maintenance_restore_redacted_facts') return (await import('../repair/redacted-facts.ts')).prepareRedactedFactsRestore(engine, row);
   if (row.intent?.kind === 'managed_maintenance_conversation_label_retire') return (await import('../repair/conversation-labels.ts')).prepareConversationLabelRetirement(engine, row);
   if (row.intent?.kind === 'managed_maintenance_conversation_relink') return (await import('../facts/conversation-relink.ts')).prepareConversationRelink(engine, row);
   if (row.intent?.kind === 'managed_maintenance_conversation_facts') return (await import('../facts/conversation-publication.ts')).prepareConversationFactsPublication(engine, row, config);
@@ -536,6 +537,8 @@ async function prepareMaintenanceKind(engine: BrainEngine, row: WriteRequest, co
   if (row.intent?.kind === 'managed_maintenance_retire_stale_atoms') return (await import('../repair/stale-atoms.ts')).prepareStaleAtomRetirement(engine, row, config);
   if (row.intent?.kind === 'managed_maintenance_restore_reextract_atom') return (await import('../repair/atoms-restore.ts')).prepareAtomRestore(engine, row, config);
   if (row.intent?.kind === 'managed_maintenance_retire_ghost_page') return (await import('../repair/ghost-pages.ts')).prepareGhostPageRetirement(engine, row, config);
+  if (row.intent?.kind === 'managed_maintenance_file_drift_remove') return (await import('../repair/file-drift.ts')).prepareDriftFileRemoval(engine, row);
+  if (row.intent?.kind === 'managed_maintenance_merge_legacy_twin') return (await import('../repair/legacy-twins.ts')).prepareLegacyTwinMerge(engine, row, config);
   if (row.intent?.kind === 'managed_maintenance_resolve_origin_twin') return (await import('../repair/origin-twins.ts')).prepareOriginTwinResolve(engine, row, config);
   if (row.intent?.kind !== 'managed_maintenance_consolidate') throw opError('invalid_params', 'Unsupported maintenance request.',
     `Request ${row.request_id} for ${row.slug} in ${row.source_id} carries a maintenance kind this gbrain version does not publish (likely queued by a newer release); nothing changed. Upgrade gbrain on the brain host, and read the receipt before submitting anything new.`,
