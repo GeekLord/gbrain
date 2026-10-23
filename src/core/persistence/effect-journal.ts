@@ -12,7 +12,7 @@ import { recordChronicleDecision } from '../chronicle/ledger.ts';
 import { isFactsExtractionEnabled } from '../facts/extract.ts';
 import { loadConfig } from '../config.ts';
 import { resolveDefaultVisibility } from '../facts/visibility.ts';
-import { declarePersistenceProtocol, PERSISTENCE_PROTOCOL_PREDICATE } from './protocol.ts';
+import { declarePersistenceProtocol, isPersistenceDeclaration, PERSISTENCE_PROTOCOL_PREDICATE } from './protocol.ts';
 import { EXPIRED_PREPARING_CHARGE_SQL } from './claim-phase.ts';
 import { refreshFenceClear } from './worktree-refresh-schema.ts';
 import { pageBatchChildRequestIds } from './page-batch-id.ts';
@@ -20,8 +20,8 @@ import { EFFECT_FAULT_POINTS, faultPoint } from './fault-points.ts';
 
 /**
  * `snapshot` is the publication's final read of the page, including deleted rows, in this transaction.
- * A remote put_page/capture/edit_page also queues a `links` effect, in one statement that inserts
- * nothing while `auto_link` or `mcp.remote_auto_links` is off (unset is on).
+ * A remote put_page/capture/edit_page also queues a `links` effect (an append_page to the compiled truth, one scoped
+ * to its appended bytes), in one statement that inserts nothing while `auto_link` or `mcp.remote_auto_links` is off (unset is on).
  */
 export async function queuePublicationEffects(tx: BrainEngine, row: EffectRequest & Partial<Pick<WriteRequest, 'operation' | 'intent' | 'authority' | 'principal_kind' | 'principal_id'>>, snapshot: PageSnapshot | null,
   outcome: Record<string, unknown>, prepared?: PreparedMutation,
@@ -54,7 +54,7 @@ export async function queuePublicationEffects(tx: BrainEngine, row: EffectReques
       else queue('facts-backstop', { visibility: await resolveDefaultVisibility(tx) });
     }
     // The links effect is inserted with the others, gated in SQL on auto_link and mcp.remote_auto_links.
-    if (queuesMentionLinks(row)) queued.push({ kind: 'links', data: { ...data }, gated: true });
+    if (queuesMentionLinks(row, prepared)) queued.push({ kind: 'links', data: { ...data, ...(prepared?.mentionRange ? { range: prepared.mentionRange } : {}) }, gated: true });
     // #5876: the Life Chronicle decision is a ledger row, not an effect; the `chronicle` cycle phase executes it.
     await recordChronicleDecision(tx, row, snapshot, outcome);
   }
@@ -70,10 +70,13 @@ export async function queuePublicationEffects(tx: BrainEngine, row: EffectReques
   }
 }
 
-/** Whether a publication of this request queues a mention `links` effect: a remote page write without trusted auto-linking. */
-export function queuesMentionLinks(row: Partial<Pick<WriteRequest, 'operation' | 'authority'>>): boolean {
-  return !!row.authority && !!row.operation && REMOTE_MENTION_OPERATIONS.includes(row.operation)
-    && !(row.authority.autoLinkTrusted ?? !row.authority.remote);
+/**
+ * Whether a publication of this request queues a mention `links` effect: a remote page write without trusted
+ * auto-linking. #7122: an append_page queues one only when it appended to the compiled truth (`mentionRange`).
+ */
+export function queuesMentionLinks(row: Partial<Pick<WriteRequest, 'operation' | 'authority'>>, prepared?: Pick<PreparedMutation, 'mentionRange'>): boolean {
+  if (!row.authority || !row.operation || (row.authority.autoLinkTrusted ?? !row.authority.remote)) return false;
+  return REMOTE_MENTION_OPERATIONS.includes(row.operation) || (row.operation === 'append_page' && !!prepared?.mentionRange);
 }
 
 /**
@@ -140,7 +143,7 @@ export async function claimPersistenceEffect(engine: BrainEngine, hostId: string
     const [claimed] = await tx.executeRaw<PersistenceEffect>(`UPDATE persistence_effects SET state='running',execution_token=$2::uuid,
       claim_expires_at=now()+interval '2 minutes',attempts=attempts+1,updated_at=now() WHERE id=$1 RETURNING *`, [candidate.id, randomUUID()]);
     return claimed;
-  });
+  }, { pipelineFirst: isPersistenceDeclaration });
 }
 
 /** #5530: an effect that commits exactly one recorded file (not a withdrawal walk or a source scan). */
@@ -246,7 +249,7 @@ export async function claimCoalescedGitEffects(engine: BrainEngine, hostId: stri
       UPDATE persistence_effects p SET state='running',execution_token=gen_random_uuid(),
       claim_expires_at=now()+interval '2 minutes',attempts=attempts+1,updated_at=now()
       FROM ready WHERE p.id=ready.id RETURNING p.*`, [hostId, worktreeId, limit]);
-  });
+  }, { pipelineFirst: isPersistenceDeclaration });
   return rows.sort((a, b) => Number(a.id) - Number(b.id));
 }
 

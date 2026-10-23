@@ -302,6 +302,10 @@
         "name": "partial_embedding"
       },
       {
+        "category": "brain",
+        "name": "sync_landing_gaps"
+      },
+      {
         "category": "ops",
         "name": "pgvector"
       },
@@ -798,6 +802,22 @@
         "name": "tracked_ownership_marker"
       },
       {
+        "category": "brain",
+        "name": "checkout_lagging"
+      },
+      {
+        "category": "brain",
+        "name": "dirty_age"
+      },
+      {
+        "category": "brain",
+        "name": "commits_outside_source_root"
+      },
+      {
+        "category": "brain",
+        "name": "quarantined_changes"
+      },
+      {
         "category": "ops",
         "name": "decide_health"
       },
@@ -878,6 +898,10 @@
         "name": "host_identity_mismatch"
       },
       {
+        "category": "ops",
+        "name": "runtime_build_skew"
+      },
+      {
         "category": "brain",
         "name": "extract_atoms_held_failed"
       },
@@ -895,6 +919,10 @@
       },
       {
         "category": "brain",
+        "name": "slug_path_mismatch"
+      },
+      {
+        "category": "brain",
         "name": "rename_identity_downgrades"
       },
       {
@@ -904,6 +932,10 @@
       {
         "category": "brain",
         "name": "missing_recorded_files"
+      },
+      {
+        "category": "brain",
+        "name": "uncommitted_sync_deletions"
       },
       {
         "category": "brain",
@@ -920,6 +952,10 @@
       {
         "category": "ops",
         "name": "managed_sync_convergence"
+      },
+      {
+        "category": "brain",
+        "name": "person_title_duplicates"
       },
       {
         "category": "brain",

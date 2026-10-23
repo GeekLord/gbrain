@@ -10,7 +10,7 @@ import type { SyncAdmissionStatus } from './sync-admission.ts';
 import { digest } from './digest.ts';
 import { fileDriftSide, type GitHoldRecord } from './sync-holds.ts';
 import { readDeletesWithheld, type DeletesWithheld } from './sync-markers.ts';
-import { NOT_CONVERGED_REPORT_STREAK, passHealth, type PassRoundSummary, type PassRow } from './sync-pass-row.ts';
+import { ABANDONED_QUIET_MS, ABANDONED_REPORT_STREAK, NOT_CONVERGED_REPORT_STREAK, passHealth, type PassRoundSummary, type PassRow } from './sync-pass-row.ts';
 
 export interface PassConvergence {
   schema: 'convergence/1'; dry_run: false; source_id: string;
@@ -52,7 +52,13 @@ export async function passConvergence(engine: Pick<BrainEngine, 'executeRaw'>, i
     duration_ms: t.duration_ms, timings_ms: t.timings_ms, last_full_at: o.converged?.last_full_at ?? null };
 }
 
-export type PassStatusReason = 'pass_unfinished' | 'not_converged' | 'settle_mismatch' | 'deletes_withheld' | 'selection_scoped' | 'admission_paused' | 'writeback_failed';
+export type PassStatusReason = 'pass_unfinished' | 'pass_abandoned' | 'not_converged' | 'settle_mismatch' | 'deletes_withheld' | 'selection_scoped' | 'admission_paused' | 'writeback_failed';
+
+/** #7355: passes in a row that never ended, the newest open one included once its row has been quiet past the no-progress window. */
+export function abandonedPasses(row: PassRow, now = Date.now()): number {
+  const quiet = row.value.telemetry.outcome === 'open' && now - Date.parse(row.updated_at) >= ABANDONED_QUIET_MS;
+  return row.value.telemetry.outcome === 'open' ? (row.value.obligations.abandoned_streak ?? 0) + (quiet ? 1 : 0) : 0;
+}
 
 /**
  * The state the newest pass puts the source in (design §9): never `synced` while it is open or ended unconverged, or while a
@@ -60,6 +66,7 @@ export type PassStatusReason = 'pass_unfinished' | 'not_converged' | 'settle_mis
  */
 export function passStatusState(row: PassRow, withheld: DeletesWithheld | null, writebackFailed: string | null = null, now = Date.now()): ['synced' | 'resumable' | 'blocked', PassStatusReason] | null {
   const t = row.value.telemetry;
+  if (abandonedPasses(row, now) >= ABANDONED_REPORT_STREAK) return ['blocked', 'pass_abandoned'];
   if (t.outcome === 'open' || (t.outcome === 'resumable' && t.stop_reason !== 'not_converged' && t.stop_reason !== 'admission_paused')) return ['resumable', 'pass_unfinished'];
   if (t.stop_reason === 'admission_paused') return ['resumable', 'admission_paused'];
   if (t.stop_reason === 'not_converged' || (row.value.obligations.not_converged_streak ?? 0) > 0) return ['resumable', 'not_converged'];
@@ -81,8 +88,9 @@ export function passStatusNext(sourceId: string, reason: PassStatusReason, row: 
           why: `The last ${row.value.obligations.not_converged_streak} passes of ${sourceId} ended not converged; another sync will not change that. Report what doctor shows with the gbrain version (read-only).` }
         : { ...sync, why: 'The last pass ran out of rounds before every path settled; the same sync continues from the current level.' };
     case 'deletes_withheld':
-      return { argv: ['gbrain', 'sync', '--source', sourceId, '--dry-run', '--json'], consent: [], actor: 'user', requires_exclusive: false, verify,
-        user_message: `Sync of ${sourceId} withheld a mass delete (more than half of its file-backed pages). If the checkout is the wrong one or incomplete, restore it and sync again; if the deletion is intended, run GBRAIN_ALLOW_MASS_RECONCILE=1 gbrain sync --source ${sourceId} on the brain host.`,
+      // #7130: deleting pages is the user's decision, never an agent's: next is ask_user whatever the actor.
+      return { ask_user: true, argv: ['gbrain', 'sync', '--source', sourceId, '--dry-run', '--json'], consent: [], actor: 'user', requires_exclusive: false, verify,
+        user_message: `Sync of ${sourceId} withheld a bulk delete (over half of its file-backed pages, or over sync.max_deletes / sync.max_delete_ratio); nothing was deleted. Review the withheld set in the dry run. If the checkout is the wrong one or incomplete, restore it and sync again; if the deletion is intended, run GBRAIN_ALLOW_MASS_RECONCILE=1 gbrain sync --source ${sourceId} on the brain host.`,
         why: 'The dry run lists the withheld set and its hash (read-only); everything else of the source is synced.' };
     case 'admission_paused':
       return { argv: ['gbrain', 'config', 'set', 'sync.admission', 'normal'], consent: [], actor: 'user', requires_exclusive: false, verify,
@@ -92,6 +100,9 @@ export function passStatusNext(sourceId: string, reason: PassStatusReason, row: 
       return { argv: ['gbrain', 'sources', 'writer', 'retry-effects', sourceId, '--request-id', writebackFailed ?? '<id>', '--dry-run'], consent: [], actor: 'agent', requires_exclusive: false, verify,
         user_message: `The Git effect of a file sync rewrote in ${sourceId} (request ${writebackFailed}) failed and is parked, so the checkout does not hold what the brain holds. Fix the cause doctor's parked_effects names, then retry it with the same command without --dry-run.`,
         why: 'The preview names the parked effect and what a retry runs (read-only); until it commits, the source is never idle.' };
+    case 'pass_abandoned':
+      return { argv: ['gbrain', 'doctor', '--json'], consent: [], actor: 'agent', requires_exclusive: false, verify,
+        why: `The last ${abandonedPasses(row)} sync passes of ${sourceId} stopped before they ended (the drain abandoned them for making no progress, or their process was killed), so another plain sync is likely to stop the same way. Report what doctor shows, with the gbrain version and the newest sync run's drain.stall (read-only).` };
     case 'selection_scoped':
       return { ...sync, why: 'The last pass converged at a narrower selection and did not advance last_commit; the plain sync runs the configured selection.' };
     default:
