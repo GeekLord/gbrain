@@ -47,8 +47,28 @@ const DIM = 1536;
  * method) is asserted separately on the instance in the smoke block.
  */
 const INTERFACE_METHODS: readonly string[] = [
+  // The import path's typed reads (part A), each the statement a raw executeRaw call ran on master:
+  // sources (engine-sql/sources.ts): the resolver's local-path, routing, default-split and one-row reads, the active-source configs that scope a legacy remote caller, and the folder-import stamp.
+  'listLocalPathSources', 'listSourceRoutingRows', 'countDefaultSourceSplit', 'listActiveSourceConfigs', 'markSourceSynced',
+  // cli reads (engine-sql/cli-reads-import.ts): the source list, a source's incarnation and company-brain receipt, and the guest lookup.
+  'listSourceRecords', 'readSourceIncarnation', 'hasCompanyBrainReceipt', 'readGuestSourceRow',
+  // entity reads and writer state: the ignored-privacy-label notice reads, the committed page's frontmatter, the writer-admin state, and whether this role owns the schema tables.
+  'readIgnoredPrivacyLabelPages', 'readLivePageFrontmatter', 'ownsSchemaTables',
   // Cycle-lock leases
   'acquireCycleLock', 'refreshCycleLock', 'releaseCycleLock', 'readCycleLocks', 'deleteCycleLock', 'deleteCycleLockIfStale',
+  // Alias fan-out reads (engine-sql/alias-fanout-reads.ts; master text pinned by test/n3-sql-move-parity.test.ts)
+  'resolveCaseSensitiveAliases', 'readPageTitle', 'readPageAliasRows', 'readEntityAliasRows',
+  // CLI export and segmented-body reads (engine-sql/export-reads.ts; master text pinned by test/n3-sql-move-parity.test.ts)
+  'listExportPageKeys', 'readExportWithdrawalLedgerBytes', 'listExportWithdrawals', 'readExportPageRows', 'normalizeFenceLines', 'readSegmentedPageHead',
+  'readBodyManifestRows', 'readBodyManifestMeta', 'readBodyManifestOutline', 'listForcedCutSeqs', 'readSegmentedVersionBodyBytes', 'listAccessPolicySourceIds',
+  // Belief coverage and keyword-index inventory (engine-sql/belief.ts, search-vector.ts)
+  'listCoveredSources', 'countSearchVectorRows',
+  // Minion queue health reads (engine-sql/jobs-health.ts; master text pinned by test/n3-sql-move-parity.test.ts)
+  'readQueueHealthSignals', 'listWaitingByQueue', 'readQueueDivergence', 'listQueueWedgeCounts', 'listPrivateQueueHealth',
+  'readWedgeSignals', 'readOldestWaitingAge', 'listStuckActiveJobsByName',
+  // Trust-tier reads (engine-sql/trust-tier-reads.ts; master text pinned by test/n3-sql-move-parity.test.ts)
+  'listVersionTrustTiers', 'listVersionReasonWriters',   // Withdrawal discovery (engine-sql/withdrawal-discovery.ts)
+  'readWithdrawalDiscovery',
   // Lifecycle
   'connect', 'disconnect', 'reconnect', 'initSchema', 'transaction', 'transactionDirect', 'registerBeforeDisconnect', 'withReservedConnection',
   // Pages CRUD
@@ -152,6 +172,23 @@ const INTERFACE_METHODS: readonly string[] = [
   'listDecideCalibrations', 'listDecideMixedModelDecisions', 'listDecideReceiptStats', 'listDecideReplayReceipts',
   'listDecideResolvedModels', 'listDecideSpendBySlot', 'pruneDecideReceipts', 'readDecideState',
   'setDecideCalibrationRetired', 'storeDecideQualification', 'upsertDecideState',
+  // Open loops (src/core/engine-sql/open-loops.ts; covered by test/engine-parity/open-loops.test.ts)
+  'closeOpenLoop', 'countOpenLoopsByCounterpartyEmail', 'listOpenLoops', 'readEntityOpenLoops', 'upsertOpenLoop',
+  // Timeline reads (src/core/engine-sql/timeline-reads.ts; covered by test/engine-parity/timeline-reads.test.ts)
+  'countSegmentedTimelinePages', 'countTimelineCommentMarkupRows', 'deleteTimelineRows', 'listStoredTimelineRowsOrdered',
+  'listTimelineOrphanPages', 'readMaxTimelineEntryId', 'sampleEffectiveDateSources', 'sampleEffectiveDates',
+  'storedTimelineRowsByPageIds',
+  // Small write-side reads (src/core/engine-sql/write-misc.ts; pinned by test/write-misc-sql-pin.test.ts)
+  'attachSourcePath', 'expireMemoryProposals', 'getWorktreeBinding', 'hasExtractedEvents', 'hasLabelledOnlyMember',
+  'listAccessTokens', 'listActiveAccessMembers', 'listAwaitingMemoryProposals', 'listMemoryProposalRows',
+  'listOwnerProposalRows', 'listSharedSkillPackRoots', 'listSynopsisSourceIds',   'purgeMemoryProposals', 'readAdmissionSource', 'readHealthMemoClock', 'readMemoryProposal', 'readOpCheckpointKeys',
+  'readPendingProposalSummary', 'readSourceState', 'sharedSkillPackTablePresent',
+  // Held members the member layer adds before any caller moves (engine-sql/trust-tier-reads.ts, engine-sql/op-checkpoint.ts)
+  'listPendingCoreEditNotices', 'purgeStaleAppliedCaptures',
+  // Members that land ahead of their callers (Rust engine landing parts), as on the main branch.
+  'beginSnapshotRead', 'compactTerminalIntent', 'completeEffectRow', 'completeWriteRow', 'countPagePurgeTombstones', 'countPurgeProbe', 'declarePersistence', 'deleteOpCheckpoint', 'deleteOwnedLinks', 'deletePurgeDecideProposals', 'deletePurgeReviewProposals', 'deletePurgeReviewQueue', 'failEffectRow', 'findTakeId', 'getLatestCalibrationProfile', 'getTrustProposal', 'getWriteGateHoldRow', 'insertCalibrationProfile', 'insertFactPurge', 'insertPublicationEffects', 'insertTakePurge', 'insertTrustProposal', 'insertWriteRequest', 'installChunkEmbeddings', 'isFactPurged', 'listFactProvenance', 'listGuestSourceIds', 'listPurgeEffects', 'listPurgeProbeItems', 'listSlotRows', 'listSlugAliases', 'listTrustProposals', 'listWriteGateHoldRows', 'listWriteGateReceiptsFor', 'loadPurgeTarget', 'lockEffectClaimRow', 'lockEffectGuard', 'lockEmbeddingSwitch', 'lockPersistenceCounters', 'lockSourceRow', 'lockWriteRequest', 'lockWriteRequestsById', 'markBeliefCommits', 'openPageEmbeddingHold', 'probePurgeDerivations', 'readAccessTokenWriteGrant', 'readAudiencePrincipals', 'readBeliefStateRows', 'readCounterRows', 'readEmbeddingCompletion', 'readFolderAccess', 'readLinkTargetPages', 'readLinkedMember', 'readLiveMember', 'readLivePageIdBySlug', 'readMayActFor', 'readOAuthClientWriteGrant', 'readOauthClient', 'readOwnedLinks', 'readOwnerOnlySourceConfig', 'readOwnerOnlySourcesPresent', 'readPageEmbeddingBudget', 'readPageIndexingState', 'readPageTrustRows', 'readReflexLiveKeys', 'readReflexPages', 'readRequestEffects', 'readScopeSourceConfigs', 'readSegmentedEmbedPage', 'readSegmentedGateEvidence', 'readSourceMembership', 'readSourceRow', 'readWriteRequest', 'readWriteRequestById', 'readWriteVisibilityProbe', 'readWriterAdminState', 'readWriterSlugFence', 'recordPageEmbeddingHold', 'releasePageEmbeddingLease', 'renewEffectClaim', 'renewPageEmbeddingLease', 'renewWriteClaim', 'requireSynchronousCommit', 'reservePageEmbedding', 'setEffectTransactionLimits', 'setPurgeProbeTimeout', 'settlePageEmbeddingReservation', 'shareLockWriteCredential', 'stampWriteClaim', 'takePageEmbeddingLease', 'upsertPagePurges', 'upsertWriteGateHold', 'upsertWriteGateReceipt', 'worktreeClaimStore', 'writerAdminStore',
+  // Members that land ahead of their callers (Rust engine landing parts), as on the main branch.
+  'abortPurgedStagings', 'addPersistenceCounters', 'bumpSourcePurgeEpoch', 'clearChunkVectors', 'clearUnkeptChunkVectors', 'countFactFingerprintLeftovers', 'countLegacyDerivedPages', 'countPendingTextChunks', 'countPurgeFingerprintResidue', 'countPurgeReviewRows', 'countPurgeVersionsCarryingClaim', 'countUnscannedTrustRows', 'deactivateDerivedTakes', 'deletePageViewDigests', 'deleteProjectionJob', 'deletePurgeTakeProposals', 'deletePurgedStagingParts', 'deleteRewrittenSegmentDerivations', 'deleteUnkeptChunks', 'deleteUnreferencedPurgedTexts', 'endBeliefLifetime', 'expireDerivedFacts', 'findPurgeBlockedPublication', 'findTopologyChanges', 'hasBeliefEvents', 'hasDrainableProjectionJob', 'hasNotifierCoverage', 'hasPersistenceTable', 'hasUnsealedPages', 'insertBeliefEvents', 'insertFactWithdrawal', 'insertHoldingPagePurges', 'insertPurgeEffects', 'isDeferredReplacementHeld', 'listAmendmentsNotApplied', 'listBeliefEventsForPurgeProbe', 'listClaimPendingSourceIds', 'listCorePageRows', 'listDerivedRows', 'listFactContextsForPurgeProbe', 'listHeldFenceCells', 'listLiveChunksByIds', 'listLiveTakesByIds', 'listManagedRootBindings', 'listNearestFactsForPurge', 'listPageChangeReasons', 'listPageGitEffectsForStrip', 'listPageProseHits', 'listPageRefsByIds', 'listPageSourcePathsForPurge', 'listPageTrustTiersByKey', 'listPurgeStreamSlugs', 'listPurgedPageRevisions', 'listPurgedTakeRows', 'listRequestsHoldingStagings', 'listRequestsRecordingReasons', 'listSegmentedPageBodies', 'listSegmentedVersionBodies', 'listSegmentedVersionsForPurge', 'listStaleChunkVectors', 'listTrustScanRows', 'listValidTimeIdentities', 'listVisibleBeliefLifetimes', 'lockLivePagesByKey', 'markNeedsRederive', 'pageAwaitsRederive', 'pickValidTimeEdition', 'publicationJournalStore', 'purgeCalibrationProfilesByWave', 'queuePageProjectionJob', 'readAccessMembers', 'readAdmissionRate', 'readBeliefFactsById', 'readBeliefHistoryRows', 'readCapacityForecastInputs', 'readChunkKeepState', 'readChunkRowsFingerprint', 'readCursorEdition', 'readDeletePageRequest', 'readFenceOverlayRows', 'readJournalLimitRows', 'readLinkContextMatches', 'readLinkContextOriginPages', 'readLiveStoredBody', 'readNotifierStatusRows', 'readOpenBeliefLifetimes', 'readOwnerHostBinding', 'readPageOrigin', 'readPageVersionEdition', 'readProjectionHead', 'readPurgeReceiptSourcePath', 'readRowTrustRows', 'readSourcePurgeEpoch', 'readSourcePurgeFlags', 'readStoredConfigValue', 'readTrustScanCeilings', 'readTrustScanCursor', 'readWorktreeManifest', 'readWriteRequestsByRequestIds', 'rearmLinksEffects', 'redactVersionChangeReasons', 'releaseDeferredReplacementClaim', 'releaseUnpublishedClaim', 'renewDeferredReplacementClaim', 'sealImportedPage', 'setProjectionChunkerVersion', 'setPurgeVersionBody', 'setWriteContext', 'softDeleteDerivedPages', 'storeSegmentDerivationsIfLive', 'upsertPageWriteGateReceipt', 'vacuumPurgedTables', 'writeTrustScanCursor',
 ];
 
 /**
@@ -163,6 +200,11 @@ const INTERFACE_METHODS: readonly string[] = [
  */
 const ENGINE_INTERNAL_HELPERS: readonly string[] = [
   'db',
+  // The member layer's private executors: the raw read the CLI reads run through, and the unscoped CLI-reads executor.
+  'rawRead',
+  // The raw read the entity reads run through (no statement bound): readIgnoredPrivacyLabelPages, readLivePageFrontmatter.
+  'untimedRead',
+  'cliReads',
   'connectForRestore',
   'applyForwardReferenceBootstrap',
   'getBulkRetryOpts',
@@ -175,11 +217,16 @@ const ENGINE_INTERNAL_HELPERS: readonly string[] = [
   'cycleLockSql',
   // Hybrid search reads: the unscoped engine-sql executor the search-read methods run through.
   'searchRead',
+  // Alias fan-out reads: the unscoped engine-sql executor the alias read methods run through.
+  'aliasFanoutRead',
   // Engine graduation: PGLite close/open that keeps the kernel lock across the custody window.
   'closeRetainingLock',
   'connectWithHeldLock',
   // #9227: whether this engine holds the datastore lock; the PGLite abandoned-claim release rests on it.
   'holdsDatastoreLock',
+  // The unscoped engine-sql executors the timeline reads and the write-side reads run through.
+  'timelineRead', 'writeMiscReads',
+  'chunkRead', 'linkRead',
 ];
 
 /**

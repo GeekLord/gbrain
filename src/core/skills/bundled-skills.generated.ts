@@ -21,75 +21,76 @@ import f18 from '../../../skills/chat-connectors/SKILL.md' with { type: 'text' }
 import f19 from '../../../skills/citation-fixer/SKILL.md' with { type: 'text' };
 import f20 from '../../../skills/citation-graph-ingest/SKILL.md' with { type: 'text' };
 import f21 from '../../../skills/cold-start/SKILL.md' with { type: 'text' };
-import f22 from '../../../skills/company-brainify/SKILL.md' with { type: 'text' };
-import f23 from '../../../skills/concept-synthesis/SKILL.md' with { type: 'text' };
-import f24 from '../../../skills/context-audit/SKILL.md' with { type: 'text' };
-import f25 from '../../../skills/conventions/agent-operator-protocol.md' with { type: 'text' };
-import f26 from '../../../skills/conventions/brain-first.md' with { type: 'text' };
-import f27 from '../../../skills/conventions/brain-routing.md' with { type: 'text' };
-import f28 from '../../../skills/conventions/cron-via-minions.md' with { type: 'text' };
-import f29 from '../../../skills/conventions/cross-modal.yaml' with { type: 'text' };
-import f30 from '../../../skills/conventions/exec-output.md' with { type: 'text' };
-import f31 from '../../../skills/conventions/model-routing.md' with { type: 'text' };
-import f32 from '../../../skills/conventions/page-privacy.md' with { type: 'text' };
-import f33 from '../../../skills/conventions/quality.md' with { type: 'text' };
-import f34 from '../../../skills/conventions/regex-discipline.md' with { type: 'text' };
-import f35 from '../../../skills/conventions/schema-evolution.md' with { type: 'text' };
-import f36 from '../../../skills/conventions/subagent-routing.md' with { type: 'text' };
-import f37 from '../../../skills/conventions/test-before-bulk.md' with { type: 'text' };
-import f38 from '../../../skills/conventions/untrusted-content.md' with { type: 'text' };
-import f39 from '../../../skills/conversation-archive/SKILL.md' with { type: 'text' };
-import f40 from '../../../skills/correction-pipeline/SKILL.md' with { type: 'text' };
-import f41 from '../../../skills/cron-scheduler/SKILL.md' with { type: 'text' };
-import f42 from '../../../skills/cross-modal-review/SKILL.md' with { type: 'text' };
-import f43 from '../../../skills/daily-task-manager/SKILL.md' with { type: 'text' };
-import f44 from '../../../skills/daily-task-prep/SKILL.md' with { type: 'text' };
-import f45 from '../../../skills/data-loss-gate/SKILL.md' with { type: 'text' };
-import f46 from '../../../skills/data-research/SKILL.md' with { type: 'text' };
-import f47 from '../../../skills/db-repair/SKILL.md' with { type: 'text' };
-import f48 from '../../../skills/draft-in-voice/SKILL.md' with { type: 'text' };
-import f49 from '../../../skills/eiirp/SKILL.md' with { type: 'text' };
-import f50 from '../../../skills/enrich/SKILL.md' with { type: 'text' };
-import f51 from '../../../skills/fact-check/SKILL.md' with { type: 'text' };
-import f52 from '../../../skills/frontmatter-guard/SKILL.md' with { type: 'text' };
-import f53 from '../../../skills/functional-area-resolver/SKILL.md' with { type: 'text' };
-import f54 from '../../../skills/gbrain-advisor/SKILL.md' with { type: 'text' };
-import f55 from '../../../skills/gbrain-upgrade/SKILL.md' with { type: 'text' };
-import f56 from '../../../skills/google-loops/SKILL.md' with { type: 'text' };
-import f57 from '../../../skills/idea-ingest/SKILL.md' with { type: 'text' };
-import f58 from '../../../skills/idea-lineage/SKILL.md' with { type: 'text' };
-import f59 from '../../../skills/ingest/SKILL.md' with { type: 'text' };
-import f60 from '../../../skills/maintain/SKILL.md' with { type: 'text' };
-import f61 from '../../../skills/mcp-access/SKILL.md' with { type: 'text' };
-import f62 from '../../../skills/measure-before-you-fix/SKILL.md' with { type: 'text' };
-import f63 from '../../../skills/media-ingest/SKILL.md' with { type: 'text' };
-import f64 from '../../../skills/meeting-ingestion/SKILL.md' with { type: 'text' };
-import f65 from '../../../skills/migrate/SKILL.md' with { type: 'text' };
-import f66 from '../../../skills/minion-orchestrator/SKILL.md' with { type: 'text' };
-import f67 from '../../../skills/perplexity-research/SKILL.md' with { type: 'text' };
-import f68 from '../../../skills/postgres-adopt/SKILL.md' with { type: 'text' };
-import f69 from '../../../skills/publish/SKILL.md' with { type: 'text' };
-import f70 from '../../../skills/query/SKILL.md' with { type: 'text' };
-import f71 from '../../../skills/remote-mcp/SKILL.md' with { type: 'text' };
-import f72 from '../../../skills/repo-architecture/SKILL.md' with { type: 'text' };
-import f73 from '../../../skills/reports/SKILL.md' with { type: 'text' };
-import f74 from '../../../skills/research-compendium/SKILL.md' with { type: 'text' };
-import f75 from '../../../skills/resolve-before-asking/SKILL.md' with { type: 'text' };
-import f76 from '../../../skills/schema-author/SKILL.md' with { type: 'text' };
-import f77 from '../../../skills/schema-unify/SKILL.md' with { type: 'text' };
-import f78 from '../../../skills/setup/SKILL.md' with { type: 'text' };
-import f79 from '../../../skills/signal-detector/SKILL.md' with { type: 'text' };
-import f80 from '../../../skills/skill-creator/SKILL.md' with { type: 'text' };
-import f81 from '../../../skills/skill-optimizer/SKILL.md' with { type: 'text' };
-import f82 from '../../../skills/skill-optimizer/skillopt-benchmark.jsonl' with { type: 'text' };
-import f83 from '../../../skills/skillpack-check/SKILL.md' with { type: 'text' };
-import f84 from '../../../skills/smoke-test/SKILL.md' with { type: 'text' };
-import f85 from '../../../skills/soul-audit/SKILL.md' with { type: 'text' };
-import f86 from '../../../skills/storage-manifest/SKILL.md' with { type: 'text' };
-import f87 from '../../../skills/strategic-reading/SKILL.md' with { type: 'text' };
-import f88 from '../../../skills/two-tier-extraction/SKILL.md' with { type: 'text' };
-import f89 from '../../../skills/voice-note-ingest/SKILL.md' with { type: 'text' };
-import f90 from '../../../skills/webhook-transforms/SKILL.md' with { type: 'text' };
+import f22 from '../../../skills/company-brainify/HISTORY-PURGE.md' with { type: 'text' };
+import f23 from '../../../skills/company-brainify/SKILL.md' with { type: 'text' };
+import f24 from '../../../skills/concept-synthesis/SKILL.md' with { type: 'text' };
+import f25 from '../../../skills/context-audit/SKILL.md' with { type: 'text' };
+import f26 from '../../../skills/conventions/agent-operator-protocol.md' with { type: 'text' };
+import f27 from '../../../skills/conventions/brain-first.md' with { type: 'text' };
+import f28 from '../../../skills/conventions/brain-routing.md' with { type: 'text' };
+import f29 from '../../../skills/conventions/cron-via-minions.md' with { type: 'text' };
+import f30 from '../../../skills/conventions/cross-modal.yaml' with { type: 'text' };
+import f31 from '../../../skills/conventions/exec-output.md' with { type: 'text' };
+import f32 from '../../../skills/conventions/model-routing.md' with { type: 'text' };
+import f33 from '../../../skills/conventions/page-privacy.md' with { type: 'text' };
+import f34 from '../../../skills/conventions/quality.md' with { type: 'text' };
+import f35 from '../../../skills/conventions/regex-discipline.md' with { type: 'text' };
+import f36 from '../../../skills/conventions/schema-evolution.md' with { type: 'text' };
+import f37 from '../../../skills/conventions/subagent-routing.md' with { type: 'text' };
+import f38 from '../../../skills/conventions/test-before-bulk.md' with { type: 'text' };
+import f39 from '../../../skills/conventions/untrusted-content.md' with { type: 'text' };
+import f40 from '../../../skills/conversation-archive/SKILL.md' with { type: 'text' };
+import f41 from '../../../skills/correction-pipeline/SKILL.md' with { type: 'text' };
+import f42 from '../../../skills/cron-scheduler/SKILL.md' with { type: 'text' };
+import f43 from '../../../skills/cross-modal-review/SKILL.md' with { type: 'text' };
+import f44 from '../../../skills/daily-task-manager/SKILL.md' with { type: 'text' };
+import f45 from '../../../skills/daily-task-prep/SKILL.md' with { type: 'text' };
+import f46 from '../../../skills/data-loss-gate/SKILL.md' with { type: 'text' };
+import f47 from '../../../skills/data-research/SKILL.md' with { type: 'text' };
+import f48 from '../../../skills/db-repair/SKILL.md' with { type: 'text' };
+import f49 from '../../../skills/draft-in-voice/SKILL.md' with { type: 'text' };
+import f50 from '../../../skills/eiirp/SKILL.md' with { type: 'text' };
+import f51 from '../../../skills/enrich/SKILL.md' with { type: 'text' };
+import f52 from '../../../skills/fact-check/SKILL.md' with { type: 'text' };
+import f53 from '../../../skills/frontmatter-guard/SKILL.md' with { type: 'text' };
+import f54 from '../../../skills/functional-area-resolver/SKILL.md' with { type: 'text' };
+import f55 from '../../../skills/gbrain-advisor/SKILL.md' with { type: 'text' };
+import f56 from '../../../skills/gbrain-upgrade/SKILL.md' with { type: 'text' };
+import f57 from '../../../skills/google-loops/SKILL.md' with { type: 'text' };
+import f58 from '../../../skills/idea-ingest/SKILL.md' with { type: 'text' };
+import f59 from '../../../skills/idea-lineage/SKILL.md' with { type: 'text' };
+import f60 from '../../../skills/ingest/SKILL.md' with { type: 'text' };
+import f61 from '../../../skills/maintain/SKILL.md' with { type: 'text' };
+import f62 from '../../../skills/mcp-access/SKILL.md' with { type: 'text' };
+import f63 from '../../../skills/measure-before-you-fix/SKILL.md' with { type: 'text' };
+import f64 from '../../../skills/media-ingest/SKILL.md' with { type: 'text' };
+import f65 from '../../../skills/meeting-ingestion/SKILL.md' with { type: 'text' };
+import f66 from '../../../skills/migrate/SKILL.md' with { type: 'text' };
+import f67 from '../../../skills/minion-orchestrator/SKILL.md' with { type: 'text' };
+import f68 from '../../../skills/perplexity-research/SKILL.md' with { type: 'text' };
+import f69 from '../../../skills/postgres-adopt/SKILL.md' with { type: 'text' };
+import f70 from '../../../skills/publish/SKILL.md' with { type: 'text' };
+import f71 from '../../../skills/query/SKILL.md' with { type: 'text' };
+import f72 from '../../../skills/remote-mcp/SKILL.md' with { type: 'text' };
+import f73 from '../../../skills/repo-architecture/SKILL.md' with { type: 'text' };
+import f74 from '../../../skills/reports/SKILL.md' with { type: 'text' };
+import f75 from '../../../skills/research-compendium/SKILL.md' with { type: 'text' };
+import f76 from '../../../skills/resolve-before-asking/SKILL.md' with { type: 'text' };
+import f77 from '../../../skills/schema-author/SKILL.md' with { type: 'text' };
+import f78 from '../../../skills/schema-unify/SKILL.md' with { type: 'text' };
+import f79 from '../../../skills/setup/SKILL.md' with { type: 'text' };
+import f80 from '../../../skills/signal-detector/SKILL.md' with { type: 'text' };
+import f81 from '../../../skills/skill-creator/SKILL.md' with { type: 'text' };
+import f82 from '../../../skills/skill-optimizer/SKILL.md' with { type: 'text' };
+import f83 from '../../../skills/skill-optimizer/skillopt-benchmark.jsonl' with { type: 'text' };
+import f84 from '../../../skills/skillpack-check/SKILL.md' with { type: 'text' };
+import f85 from '../../../skills/smoke-test/SKILL.md' with { type: 'text' };
+import f86 from '../../../skills/soul-audit/SKILL.md' with { type: 'text' };
+import f87 from '../../../skills/storage-manifest/SKILL.md' with { type: 'text' };
+import f88 from '../../../skills/strategic-reading/SKILL.md' with { type: 'text' };
+import f89 from '../../../skills/two-tier-extraction/SKILL.md' with { type: 'text' };
+import f90 from '../../../skills/voice-note-ingest/SKILL.md' with { type: 'text' };
+import f91 from '../../../skills/webhook-transforms/SKILL.md' with { type: 'text' };
 
 export interface BundledSkillMeta { name: string; audience: 'owner' | 'downstream'; assets: string[] }
 
@@ -102,6 +103,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -113,6 +115,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -124,6 +127,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -131,7 +135,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "ask-user",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -142,6 +147,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/regex-discipline.md",
       "conventions/test-before-bulk.md",
       "conventions/untrusted-content.md"
@@ -156,6 +162,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
       "conventions/cross-modal.yaml",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -167,6 +174,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "conventions/test-before-bulk.md"
     ]
@@ -179,6 +187,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
       "conventions/cron-via-minions.md",
+      "conventions/model-routing.md",
       "conventions/subagent-routing.md"
     ]
   },
@@ -188,6 +197,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -199,6 +209,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -206,7 +217,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "brain-taxonomist",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -216,7 +228,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -229,6 +242,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
       "conventions/cron-via-minions.md",
+      "conventions/model-routing.md",
       "conventions/page-privacy.md",
       "conventions/quality.md",
       "conventions/subagent-routing.md",
@@ -240,7 +254,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "capture",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -251,6 +266,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/test-before-bulk.md",
       "conventions/untrusted-content.md"
     ]
@@ -261,6 +277,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "_output-rules.md",
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "conventions/test-before-bulk.md"
     ]
@@ -271,6 +288,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/regex-discipline.md",
       "conventions/test-before-bulk.md",
       "conventions/untrusted-content.md"
@@ -281,7 +299,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -290,9 +309,11 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
+      "company-brainify/HISTORY-PURGE.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
       "conventions/cron-via-minions.md",
+      "conventions/model-routing.md",
       "conventions/regex-discipline.md",
       "conventions/subagent-routing.md",
       "conventions/test-before-bulk.md"
@@ -306,6 +327,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "conventions/test-before-bulk.md"
     ]
@@ -316,6 +338,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -327,6 +350,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/test-before-bulk.md",
       "conventions/untrusted-content.md"
     ]
@@ -338,7 +362,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -347,6 +372,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/cron-via-minions.md",
+      "conventions/model-routing.md",
       "conventions/subagent-routing.md",
       "conventions/test-before-bulk.md"
     ]
@@ -365,14 +391,16 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "daily-task-manager",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "daily-task-prep",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -383,6 +411,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/test-before-bulk.md"
     ]
   },
@@ -391,6 +420,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -398,7 +428,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "db-repair",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -409,6 +440,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -419,7 +451,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -429,6 +462,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -438,6 +472,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "conventions/untrusted-content.md"
     ]
@@ -447,6 +482,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "owner",
     "assets": [
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/page-privacy.md",
       "conventions/quality.md"
     ]
@@ -455,7 +491,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "functional-area-resolver",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -463,21 +500,24 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "gbrain-upgrade",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "google-loops",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -487,6 +527,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -495,6 +536,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -505,6 +547,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -514,14 +557,16 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "mcp-access",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -530,6 +575,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/test-before-bulk.md"
     ]
   },
@@ -540,6 +586,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -551,6 +598,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -561,6 +609,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
       "conventions/brain-routing.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "conventions/untrusted-content.md"
     ]
@@ -572,6 +621,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "conventions/agent-operator-protocol.md",
       "conventions/cron-via-minions.md",
       "conventions/exec-output.md",
+      "conventions/model-routing.md",
       "conventions/subagent-routing.md"
     ]
   },
@@ -583,6 +633,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -590,14 +641,16 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "postgres-adopt",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "publish",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -605,14 +658,16 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "remote-mcp",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -622,6 +677,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -630,7 +686,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "_output-rules.md",
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -641,6 +698,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "conventions/test-before-bulk.md",
       "conventions/untrusted-content.md"
@@ -653,7 +711,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.json",
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -662,6 +721,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "assets": [
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/schema-evolution.md"
     ]
   },
@@ -669,14 +729,16 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "schema-unify",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "setup",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -684,6 +746,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -691,7 +754,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "skill-creator",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -699,6 +763,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "owner",
     "assets": [
       "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md",
       "conventions/quality.md",
       "skill-optimizer/skillopt-benchmark.jsonl"
     ]
@@ -707,21 +772,24 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "skillpack-check",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "smoke-test",
     "audience": "owner",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
     "name": "soul-audit",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -729,7 +797,8 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "audience": "downstream",
     "assets": [
       "conventions/agent-operator-protocol.md",
-      "conventions/brain-first.md"
+      "conventions/brain-first.md",
+      "conventions/model-routing.md"
     ]
   },
   {
@@ -740,6 +809,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -751,7 +821,6 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
-      "conventions/cross-modal.yaml",
       "conventions/model-routing.md",
       "conventions/regex-discipline.md",
       "conventions/test-before-bulk.md",
@@ -766,6 +835,7 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
       "_brain-filing-rules.md",
       "conventions/agent-operator-protocol.md",
       "conventions/brain-first.md",
+      "conventions/model-routing.md",
       "conventions/quality.md"
     ]
   },
@@ -773,13 +843,14 @@ export const BUNDLED_SKILLS: readonly BundledSkillMeta[] = [
     "name": "webhook-transforms",
     "audience": "downstream",
     "assets": [
-      "conventions/agent-operator-protocol.md"
+      "conventions/agent-operator-protocol.md",
+      "conventions/model-routing.md"
     ]
   }
 ];
 
 export const BUNDLED_SKILL_FILES: Readonly<Record<string, string>> = {
-  "_brain-filing-rules.json": "{\n  \"version\": \"1.0.0\",\n  \"companion\": \"_brain-filing-rules.md\",\n  \"description\": \"Canonical (machine-readable) brain filing rules. The .md companion is the human explainer; this JSON is what `gbrain check-resolvable` audits against. Keep both in sync.\",\n  \"rules\": [\n    {\n      \"kind\": \"person\",\n      \"directory\": \"people/\",\n      \"examples\": [\"founders\", \"investors\", \"attendees\", \"contacts\"],\n      \"description\": \"A page whose primary subject is one person.\"\n    },\n    {\n      \"kind\": \"company\",\n      \"directory\": \"companies/\",\n      \"examples\": [\"portfolio companies\", \"acquirers\", \"vendors\"],\n      \"description\": \"A page whose primary subject is one company or organization.\"\n    },\n    {\n      \"kind\": \"deal\",\n      \"directory\": \"deals/\",\n      \"examples\": [\"seed rounds\", \"acquisitions\"],\n      \"description\": \"A page whose primary subject is a financing or M&A transaction.\"\n    },\n    {\n      \"kind\": \"meeting\",\n      \"directory\": \"meetings/\",\n      \"examples\": [\"1:1s\", \"pitches\", \"pods\"],\n      \"description\": \"A meeting transcript or minutes. Propagate entities to companies/ and people/ pages.\"\n    },\n    {\n      \"kind\": \"concept\",\n      \"directory\": \"concepts/\",\n      \"examples\": [\"mental models\", \"theses\", \"frameworks\"],\n      \"description\": \"A reusable idea, framework, or mental model not tied to a specific person/company.\"\n    },\n    {\n      \"kind\": \"project\",\n      \"directory\": \"projects/\",\n      \"examples\": [\"internal initiatives\", \"multi-session work\"],\n      \"description\": \"A multi-session piece of work with its own arc.\"\n    },\n    {\n      \"kind\": \"analysis\",\n      \"directory\": \"analysis/\",\n      \"examples\": [\"deep dives\", \"comparative studies\"],\n      \"description\": \"A long-form analysis of a specific topic.\"\n    },\n    {\n      \"kind\": \"civic\",\n      \"directory\": \"civic/\",\n      \"examples\": [\"policy analysis\", \"government topics\"],\n      \"description\": \"Public-sector, policy, or civic-issue content.\"\n    },\n    {\n      \"kind\": \"writing\",\n      \"directory\": \"writing/\",\n      \"examples\": [\"essays\", \"drafts\", \"published pieces\"],\n      \"description\": \"A piece of prose authored by the user.\"\n    },\n    {\n      \"kind\": \"guide\",\n      \"directory\": \"guides/\",\n      \"examples\": [\"runbooks\", \"how-to docs\"],\n      \"description\": \"A guide or runbook authored for future reference.\"\n    },\n    {\n      \"kind\": \"tech\",\n      \"directory\": \"tech/\",\n      \"examples\": [\"APIs\", \"libraries\", \"language notes\"],\n      \"description\": \"Technical references and tooling notes not tied to a specific company.\"\n    },\n    {\n      \"kind\": \"finance\",\n      \"directory\": \"finance/\",\n      \"examples\": [\"market data\", \"metrics\"],\n      \"description\": \"Financial reference data not tied to a single deal.\"\n    },\n    {\n      \"kind\": \"personal\",\n      \"directory\": \"personal/\",\n      \"examples\": [\"logistics\", \"family\"],\n      \"description\": \"Personal-life content — kept separate from work.\"\n    },\n    {\n      \"kind\": \"idea\",\n      \"directory\": \"ideas/\",\n      \"examples\": [\"product ideas\", \"essay seeds\", \"back-of-envelope concepts\"],\n      \"description\": \"Generative ideas the user might build, write, or expand later. Stub-shaped pages that mature over time. voice-note-ingest, archive-crawler, and similar capture-flavored skills file here when content is something to potentially act on.\"\n    },\n    {\n      \"kind\": \"research\",\n      \"directory\": \"research/\",\n      \"examples\": [\"web-research deltas\", \"freshness checks\", \"citation-verified claims\"],\n      \"description\": \"Web-research output: what is NEW vs already-known about a topic, citation-checked claims, freshness deltas. perplexity-research and academic-verify file here.\"\n    },\n    {\n      \"kind\": \"original\",\n      \"directory\": \"originals/\",\n      \"examples\": [\"the user's own theses\", \"frameworks the user generated\", \"novel observations the user expressed\"],\n      \"description\": \"Pages where the user is the primary author of the idea — original thinking, not summarizations of someone else's work. voice-note-ingest, archive-crawler, signal-detector route content here when the user is the originator.\"\n    },\n    {\n      \"kind\": \"voice-note\",\n      \"directory\": \"voice-notes/\",\n      \"examples\": [\"raw transcripts\", \"audio capture pages\"],\n      \"description\": \"Voice-note transcript holders, especially when the content is a random thought that doesn't cleanly fit originals/, concepts/, or another subject directory. voice-note-ingest is the primary writer.\"\n    },\n    {\n      \"kind\": \"openclaw\",\n      \"directory\": \"openclaw/\",\n      \"examples\": [\"agent-state notes\"],\n      \"description\": \"Notes about the host OpenClaw agent itself, not the underlying entities.\"\n    },\n    {\n      \"kind\": \"synthesis-output\",\n      \"directory\": \"media/books/\",\n      \"examples\": [\"personalized book mirrors\", \"two-column chapter analyses\"],\n      \"description\": \"Sanctioned exception to 'file by primary subject' for sui generis synthesized output that is one-of-one to a single book and a specific reader. Format-prefixed under media/<format>/ is allowed for synthesis output only, never for raw ingest. See _brain-filing-rules.md.\"\n    },\n    {\n      \"kind\": \"synthesis-output\",\n      \"directory\": \"media/articles/\",\n      \"examples\": [\"personalized article reads\", \"long-form content tailored to reader\"],\n      \"description\": \"Same sanctioned exception as media/books/. One-of-one synthesis output of an article personalized for the reader. Distinct from raw article ingest, which goes to the article's primary-subject directory.\"\n    },\n    {\n      \"kind\": \"daily\",\n      \"directory\": \"daily/\",\n      \"examples\": [\"daily/calendar/YYYY-MM-DD.md\", \"daily/notes/YYYY-MM-DD.md\"],\n      \"description\": \"Date-keyed pages for events, calendar entries, or daily notes. Calendar imports land at daily/calendar/YYYY-MM-DD.md with attendees cross-linked to people/. Use when the primary subject is the date itself, not a person or topic.\"\n    },\n    {\n      \"kind\": \"media-format\",\n      \"directory\": \"media/\",\n      \"examples\": [\"media/x/{handle}/\", \"media/audio/\", \"media/video/\"],\n      \"description\": \"Format-prefixed parent for media-by-source-format ingest. Subdirectories like media/x/{handle}/ hold X/Twitter archives, media/audio/ holds podcast/voice captures. The format-prefix lives only when the content is sui generis to the source format AND lacks a clean primary-subject directory. Prefer subject-by-subject filing; fall through to media/ only when the source format IS the unifying frame.\"\n    },\n    {\n      \"kind\": \"inbox\",\n      \"directory\": \"inbox/\",\n      \"examples\": [\"captured thoughts\", \"pasted snippets awaiting filing\"],\n      \"description\": \"Raw captured content awaiting filing; `gbrain capture` writes here. Move a page to its primary-subject directory once it is understood.\"\n    },\n    {\n      \"kind\": \"conversation\",\n      \"directory\": \"conversations/\",\n      \"examples\": [\"conversations/chatgpt/{thread-slug}.md\", \"conversations/claude/{thread-slug}.md\"],\n      \"description\": \"Imported chat exports (ChatGPT, Claude, etc.) where the conversation itself is the artifact. Cross-link concepts and people from the conversation; the conversation page is the source-of-truth for the dialog. Distinct from voice-notes/ (which holds raw voice capture).\"\n    }\n  ],\n  \"sources_dir\": {\n    \"directory\": \"sources/\",\n    \"purpose\": \"ONLY for raw data: bulk imports, API dumps, periodic captures. A page with a clear primary subject (person, company, concept) does NOT belong here.\",\n    \"not_for\": [\"articles about a person\", \"analyses of a company\", \"reusable frameworks\"]\n  },\n  \"notes\": [\n    \"The PRIMARY SUBJECT of the content determines the directory, not the format or source skill.\",\n    \"When in doubt: what would you search for to find this page again?\",\n    \"Cross-link from related directories via back-links — do not duplicate content.\"\n  ],\n  \"dream_synthesize_paths\": {\n    \"description\": \"Single source of truth for the v0.23 dream-cycle synthesize/patterns trusted-workspace allow-list. The cycle's synthesize phase reads this list and threads it as `allowed_slug_prefixes` to every subagent it dispatches; put_page enforces it server-side. Editing this list is the ONLY way to add a new directory the synthesis subagent may write to.\",\n    \"globs\": [\n      \"wiki/personal/reflections/*\",\n      \"wiki/originals/*\",\n      \"wiki/personal/patterns/*\",\n      \"wiki/people/*\",\n      \"dream-cycle-summaries/*\"\n    ]\n  }\n}\n",
+  "_brain-filing-rules.json": "{\n  \"version\": \"1.0.0\",\n  \"companion\": \"_brain-filing-rules.md\",\n  \"description\": \"Canonical (machine-readable) brain filing rules. The .md companion is the human explainer; this JSON is what `gbrain check-resolvable` audits against. Keep both in sync.\",\n  \"rules\": [\n    {\n      \"kind\": \"person\",\n      \"directory\": \"people/\",\n      \"examples\": [\"founders\", \"investors\", \"attendees\", \"contacts\"],\n      \"description\": \"A page whose primary subject is one person.\"\n    },\n    {\n      \"kind\": \"company\",\n      \"directory\": \"companies/\",\n      \"examples\": [\"portfolio companies\", \"acquirers\", \"vendors\"],\n      \"description\": \"A page whose primary subject is one company or organization.\"\n    },\n    {\n      \"kind\": \"deal\",\n      \"directory\": \"deals/\",\n      \"examples\": [\"seed rounds\", \"acquisitions\"],\n      \"description\": \"A page whose primary subject is a financing or M&A transaction.\"\n    },\n    {\n      \"kind\": \"meeting\",\n      \"directory\": \"meetings/\",\n      \"examples\": [\"1:1s\", \"pitches\", \"pods\"],\n      \"description\": \"A meeting transcript or minutes. Propagate entities to companies/ and people/ pages.\"\n    },\n    {\n      \"kind\": \"concept\",\n      \"directory\": \"concepts/\",\n      \"examples\": [\"mental models\", \"theses\", \"frameworks\"],\n      \"description\": \"A reusable idea, framework, or mental model not tied to a specific person/company.\"\n    },\n    {\n      \"kind\": \"project\",\n      \"directory\": \"projects/\",\n      \"examples\": [\"internal initiatives\", \"multi-session work\"],\n      \"description\": \"A multi-session piece of work with its own arc.\"\n    },\n    {\n      \"kind\": \"analysis\",\n      \"directory\": \"analysis/\",\n      \"examples\": [\"deep dives\", \"comparative studies\"],\n      \"description\": \"A long-form analysis of a specific topic.\"\n    },\n    {\n      \"kind\": \"civic\",\n      \"directory\": \"civic/\",\n      \"examples\": [\"policy analysis\", \"government topics\"],\n      \"description\": \"Public-sector, policy, or civic-issue content.\"\n    },\n    {\n      \"kind\": \"writing\",\n      \"directory\": \"writing/\",\n      \"examples\": [\"essays\", \"drafts\", \"published pieces\"],\n      \"description\": \"A piece of prose authored by the user.\"\n    },\n    {\n      \"kind\": \"guide\",\n      \"directory\": \"guides/\",\n      \"examples\": [\"runbooks\", \"how-to docs\"],\n      \"description\": \"A guide or runbook authored for future reference.\"\n    },\n    {\n      \"kind\": \"tech\",\n      \"directory\": \"tech/\",\n      \"examples\": [\"APIs\", \"libraries\", \"language notes\"],\n      \"description\": \"Technical references and tooling notes not tied to a specific company.\"\n    },\n    {\n      \"kind\": \"finance\",\n      \"directory\": \"finance/\",\n      \"examples\": [\"market data\", \"metrics\"],\n      \"description\": \"Financial reference data not tied to a single deal.\"\n    },\n    {\n      \"kind\": \"personal\",\n      \"directory\": \"personal/\",\n      \"examples\": [\"logistics\", \"family\"],\n      \"description\": \"Personal-life content — kept separate from work.\"\n    },\n    {\n      \"kind\": \"idea\",\n      \"directory\": \"ideas/\",\n      \"examples\": [\"product ideas\", \"essay seeds\", \"back-of-envelope concepts\"],\n      \"description\": \"Generative ideas the user might build, write, or expand later. Stub-shaped pages that mature over time. voice-note-ingest, archive-crawler, and similar capture-flavored skills file here when content is something to potentially act on. On gbrain-base-v2, write type: concept and subtype: idea explicitly.\"\n    },\n    {\n      \"kind\": \"research\",\n      \"directory\": \"research/\",\n      \"examples\": [\"web-research deltas\", \"freshness checks\", \"citation-verified claims\"],\n      \"description\": \"Web-research output: what is NEW vs already-known about a topic, citation-checked claims, freshness deltas. perplexity-research and academic-verify file here.\"\n    },\n    {\n      \"kind\": \"original\",\n      \"directory\": \"originals/\",\n      \"examples\": [\"the user's own theses\", \"frameworks the user generated\", \"novel observations the user expressed\"],\n      \"description\": \"Pages where the user is the primary author of the idea — original thinking, not summarizations of someone else's work. voice-note-ingest, archive-crawler, signal-detector route content here when the user is the originator. On gbrain-base-v2, write type: concept and subtype: original explicitly.\"\n    },\n    {\n      \"kind\": \"voice-note\",\n      \"directory\": \"voice-notes/\",\n      \"examples\": [\"raw transcripts\", \"audio capture pages\"],\n      \"description\": \"Voice-note transcript holders, especially when the content is a random thought that doesn't cleanly fit originals/, concepts/, or another subject directory. voice-note-ingest is the primary writer.\"\n    },\n    {\n      \"kind\": \"openclaw\",\n      \"directory\": \"openclaw/\",\n      \"examples\": [\"agent-state notes\"],\n      \"description\": \"Notes about the host OpenClaw agent itself, not the underlying entities.\"\n    },\n    {\n      \"kind\": \"synthesis-output\",\n      \"directory\": \"media/books/\",\n      \"examples\": [\"personalized book mirrors\", \"two-column chapter analyses\"],\n      \"description\": \"Sanctioned exception to 'file by primary subject' for sui generis synthesized output that is one-of-one to a single book and a specific reader. Format-prefixed under media/<format>/ is allowed for synthesis output only, never for raw ingest. See _brain-filing-rules.md.\"\n    },\n    {\n      \"kind\": \"synthesis-output\",\n      \"directory\": \"media/articles/\",\n      \"examples\": [\"personalized article reads\", \"long-form content tailored to reader\"],\n      \"description\": \"Same sanctioned exception as media/books/. One-of-one synthesis output of an article personalized for the reader. Distinct from raw article ingest, which goes to the article's primary-subject directory.\"\n    },\n    {\n      \"kind\": \"daily\",\n      \"directory\": \"daily/\",\n      \"examples\": [\"daily/calendar/YYYY-MM-DD.md\", \"daily/notes/YYYY-MM-DD.md\"],\n      \"description\": \"Date-keyed pages for events, calendar entries, or daily notes. Calendar imports land at daily/calendar/YYYY-MM-DD.md with attendees cross-linked to people/. Use when the primary subject is the date itself, not a person or topic.\"\n    },\n    {\n      \"kind\": \"media-format\",\n      \"directory\": \"media/\",\n      \"examples\": [\"media/x/{handle}/\", \"media/audio/\", \"media/video/\"],\n      \"description\": \"Format-prefixed parent for media-by-source-format ingest. Subdirectories like media/x/{handle}/ hold X/Twitter archives, media/audio/ holds podcast/voice captures. The format-prefix lives only when the content is sui generis to the source format AND lacks a clean primary-subject directory. Prefer subject-by-subject filing; fall through to media/ only when the source format IS the unifying frame.\"\n    },\n    {\n      \"kind\": \"inbox\",\n      \"directory\": \"inbox/\",\n      \"examples\": [\"captured thoughts\", \"pasted snippets awaiting filing\"],\n      \"description\": \"Raw captured content awaiting filing; `gbrain capture` writes here. Move a page to its primary-subject directory once it is understood.\"\n    },\n    {\n      \"kind\": \"conversation\",\n      \"directory\": \"conversations/\",\n      \"examples\": [\"conversations/chatgpt/{thread-slug}.md\", \"conversations/claude/{thread-slug}.md\"],\n      \"description\": \"Imported chat exports (ChatGPT, Claude, etc.) where the conversation itself is the artifact. Cross-link concepts and people from the conversation; the conversation page is the source-of-truth for the dialog. Distinct from voice-notes/ (which holds raw voice capture).\"\n    }\n  ],\n  \"sources_dir\": {\n    \"directory\": \"sources/\",\n    \"purpose\": \"ONLY for raw data: bulk imports, API dumps, periodic captures. A page with a clear primary subject (person, company, concept) does NOT belong here.\",\n    \"not_for\": [\"articles about a person\", \"analyses of a company\", \"reusable frameworks\"]\n  },\n  \"notes\": [\n    \"The PRIMARY SUBJECT of the content determines the directory, not the format or source skill.\",\n    \"When in doubt: what would you search for to find this page again?\",\n    \"Cross-link from related directories via back-links — do not duplicate content.\"\n  ],\n  \"dream_synthesize_paths\": {\n    \"description\": \"Single source of truth for the v0.23 dream-cycle synthesize/patterns trusted-workspace allow-list. The cycle's synthesize phase reads this list and threads it as `allowed_slug_prefixes` to every subagent it dispatches; put_page enforces it server-side. Editing this list is the ONLY way to add a new directory the synthesis subagent may write to.\",\n    \"globs\": [\n      \"wiki/personal/reflections/*\",\n      \"wiki/originals/*\",\n      \"wiki/personal/patterns/*\",\n      \"wiki/people/*\",\n      \"dream-cycle-summaries/*\"\n    ]\n  }\n}\n",
   "_brain-filing-rules.md": f1,
   "_output-rules.md": f2,
   "academic-verify/SKILL.md": f3,
@@ -801,73 +872,74 @@ export const BUNDLED_SKILL_FILES: Readonly<Record<string, string>> = {
   "citation-fixer/SKILL.md": f19,
   "citation-graph-ingest/SKILL.md": f20,
   "cold-start/SKILL.md": f21,
-  "company-brainify/SKILL.md": f22,
-  "concept-synthesis/SKILL.md": f23,
-  "context-audit/SKILL.md": f24,
-  "conventions/agent-operator-protocol.md": f25,
-  "conventions/brain-first.md": f26,
-  "conventions/brain-routing.md": f27,
-  "conventions/cron-via-minions.md": f28,
-  "conventions/cross-modal.yaml": f29,
-  "conventions/exec-output.md": f30,
-  "conventions/model-routing.md": f31,
-  "conventions/page-privacy.md": f32,
-  "conventions/quality.md": f33,
-  "conventions/regex-discipline.md": f34,
-  "conventions/schema-evolution.md": f35,
-  "conventions/subagent-routing.md": f36,
-  "conventions/test-before-bulk.md": f37,
-  "conventions/untrusted-content.md": f38,
-  "conversation-archive/SKILL.md": f39,
-  "correction-pipeline/SKILL.md": f40,
-  "cron-scheduler/SKILL.md": f41,
-  "cross-modal-review/SKILL.md": f42,
-  "daily-task-manager/SKILL.md": f43,
-  "daily-task-prep/SKILL.md": f44,
-  "data-loss-gate/SKILL.md": f45,
-  "data-research/SKILL.md": f46,
-  "db-repair/SKILL.md": f47,
-  "draft-in-voice/SKILL.md": f48,
-  "eiirp/SKILL.md": f49,
-  "enrich/SKILL.md": f50,
-  "fact-check/SKILL.md": f51,
-  "frontmatter-guard/SKILL.md": f52,
-  "functional-area-resolver/SKILL.md": f53,
-  "gbrain-advisor/SKILL.md": f54,
-  "gbrain-upgrade/SKILL.md": f55,
-  "google-loops/SKILL.md": f56,
-  "idea-ingest/SKILL.md": f57,
-  "idea-lineage/SKILL.md": f58,
-  "ingest/SKILL.md": f59,
-  "maintain/SKILL.md": f60,
-  "mcp-access/SKILL.md": f61,
-  "measure-before-you-fix/SKILL.md": f62,
-  "media-ingest/SKILL.md": f63,
-  "meeting-ingestion/SKILL.md": f64,
-  "migrate/SKILL.md": f65,
-  "minion-orchestrator/SKILL.md": f66,
-  "perplexity-research/SKILL.md": f67,
-  "postgres-adopt/SKILL.md": f68,
-  "publish/SKILL.md": f69,
-  "query/SKILL.md": f70,
-  "remote-mcp/SKILL.md": f71,
-  "repo-architecture/SKILL.md": f72,
-  "reports/SKILL.md": f73,
-  "research-compendium/SKILL.md": f74,
-  "resolve-before-asking/SKILL.md": f75,
-  "schema-author/SKILL.md": f76,
-  "schema-unify/SKILL.md": f77,
-  "setup/SKILL.md": f78,
-  "signal-detector/SKILL.md": f79,
-  "skill-creator/SKILL.md": f80,
-  "skill-optimizer/SKILL.md": f81,
-  "skill-optimizer/skillopt-benchmark.jsonl": f82,
-  "skillpack-check/SKILL.md": f83,
-  "smoke-test/SKILL.md": f84,
-  "soul-audit/SKILL.md": f85,
-  "storage-manifest/SKILL.md": f86,
-  "strategic-reading/SKILL.md": f87,
-  "two-tier-extraction/SKILL.md": f88,
-  "voice-note-ingest/SKILL.md": f89,
-  "webhook-transforms/SKILL.md": f90,
+  "company-brainify/HISTORY-PURGE.md": f22,
+  "company-brainify/SKILL.md": f23,
+  "concept-synthesis/SKILL.md": f24,
+  "context-audit/SKILL.md": f25,
+  "conventions/agent-operator-protocol.md": f26,
+  "conventions/brain-first.md": f27,
+  "conventions/brain-routing.md": f28,
+  "conventions/cron-via-minions.md": f29,
+  "conventions/cross-modal.yaml": f30,
+  "conventions/exec-output.md": f31,
+  "conventions/model-routing.md": f32,
+  "conventions/page-privacy.md": f33,
+  "conventions/quality.md": f34,
+  "conventions/regex-discipline.md": f35,
+  "conventions/schema-evolution.md": f36,
+  "conventions/subagent-routing.md": f37,
+  "conventions/test-before-bulk.md": f38,
+  "conventions/untrusted-content.md": f39,
+  "conversation-archive/SKILL.md": f40,
+  "correction-pipeline/SKILL.md": f41,
+  "cron-scheduler/SKILL.md": f42,
+  "cross-modal-review/SKILL.md": f43,
+  "daily-task-manager/SKILL.md": f44,
+  "daily-task-prep/SKILL.md": f45,
+  "data-loss-gate/SKILL.md": f46,
+  "data-research/SKILL.md": f47,
+  "db-repair/SKILL.md": f48,
+  "draft-in-voice/SKILL.md": f49,
+  "eiirp/SKILL.md": f50,
+  "enrich/SKILL.md": f51,
+  "fact-check/SKILL.md": f52,
+  "frontmatter-guard/SKILL.md": f53,
+  "functional-area-resolver/SKILL.md": f54,
+  "gbrain-advisor/SKILL.md": f55,
+  "gbrain-upgrade/SKILL.md": f56,
+  "google-loops/SKILL.md": f57,
+  "idea-ingest/SKILL.md": f58,
+  "idea-lineage/SKILL.md": f59,
+  "ingest/SKILL.md": f60,
+  "maintain/SKILL.md": f61,
+  "mcp-access/SKILL.md": f62,
+  "measure-before-you-fix/SKILL.md": f63,
+  "media-ingest/SKILL.md": f64,
+  "meeting-ingestion/SKILL.md": f65,
+  "migrate/SKILL.md": f66,
+  "minion-orchestrator/SKILL.md": f67,
+  "perplexity-research/SKILL.md": f68,
+  "postgres-adopt/SKILL.md": f69,
+  "publish/SKILL.md": f70,
+  "query/SKILL.md": f71,
+  "remote-mcp/SKILL.md": f72,
+  "repo-architecture/SKILL.md": f73,
+  "reports/SKILL.md": f74,
+  "research-compendium/SKILL.md": f75,
+  "resolve-before-asking/SKILL.md": f76,
+  "schema-author/SKILL.md": f77,
+  "schema-unify/SKILL.md": f78,
+  "setup/SKILL.md": f79,
+  "signal-detector/SKILL.md": f80,
+  "skill-creator/SKILL.md": f81,
+  "skill-optimizer/SKILL.md": f82,
+  "skill-optimizer/skillopt-benchmark.jsonl": f83,
+  "skillpack-check/SKILL.md": f84,
+  "smoke-test/SKILL.md": f85,
+  "soul-audit/SKILL.md": f86,
+  "storage-manifest/SKILL.md": f87,
+  "strategic-reading/SKILL.md": f88,
+  "two-tier-extraction/SKILL.md": f89,
+  "voice-note-ingest/SKILL.md": f90,
+  "webhook-transforms/SKILL.md": f91,
 };

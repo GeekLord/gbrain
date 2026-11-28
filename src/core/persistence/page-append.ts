@@ -20,6 +20,7 @@
  * which mines those bytes alone (#7122, effect-links.ts); timeline rows and fence projections of the appended text follow
  * PR 4's incremental derivation.
  */
+import { normalizeSlug } from '../utils.ts';
 import { createHash } from 'node:crypto';
 import type { BrainEngine } from '../engine.ts';
 import type { GBrainConfig } from '../config.ts';
@@ -176,7 +177,7 @@ export async function admitPageAppend(ctx: OperationContext, input: AppendPageIn
   } catch (error) {
     if (!(error instanceof OperationError) || (error.canonical ?? error.code) !== 'tail_changed') throw error;
     const sourceId = String(error.receiptFields?.source_id ?? input.source_id ?? ctx.sourceId ?? 'default');
-    const slug = String(error.receiptFields?.slug ?? input.slug).toLowerCase();
+    const slug = normalizeSlug(String(error.receiptFields?.slug ?? input.slug));
     const snapshot = await ctx.engine.readPageSnapshot(slug, { sourceId });
     const found = snapshot && !snapshot.page.deleted_at ? await regionTail(ctx.engine, snapshot, intent.region) : null;
     const tail = found && !(ctx.remote !== false && found.guarded) ? found : null;
@@ -298,6 +299,12 @@ export interface SegmentedSpliceRequest {
   replacements(page: SplicePage): Promise<{ replacements: BodyReplacement[]; appendTo?: 'truth' | 'timeline'; outcome?: Record<string, unknown> } | null>;
   /** Restage the whole body (appendProbe). */
   full?: boolean;
+  /**
+   * #10589: the page's new Markdown file from the frontmatter the write stamps, for a splice whose file its caller already
+   * renders (a facts fence edit, which writes the file its whole-body path would); otherwise the stored regions with the
+   * replacements applied.
+   */
+  file?: (frontmatter: Record<string, unknown>) => string;
 }
 
 /**
@@ -335,7 +342,7 @@ export async function prepareSegmentedSpliceMutation(engine: BrainEngine, row: W
     ['body', stripManagedFenceRows(built.replacements.map(r => Buffer.from(r.bytes).toString('utf8')).join('\n'))], ['frontmatter', frontmatterText(frontmatter)]],
     gateInput(gateTrust, row.id), gateConfig), { sourceId: row.source_id, sourceUri: gateTrust.origin?.source_uri ?? null }) : null;
   if (gate?.verdict === 'flag' && !isQuarantined(frontmatter)) frontmatter[CONTENT_FLAG_KEY] = buildContentFlagMarker('instruction_like', writeGateDetail(gate));
-  const content = row.worktree_id ? await splicedPageFile(engine, stored, frontmatter, built.replacements, built.appendTo) : undefined;
+  const content = !row.worktree_id ? undefined : request.file ? request.file(frontmatter) : await splicedPageFile(engine, stored, frontmatter, built.replacements, built.appendTo);
   if (content === null) return null;
   const quarantined = isQuarantined(frontmatter);
   const splice = await spliceSegmentedBody(engine, { sourceId: row.source_id, slug: row.slug, page, frontmatter, tags: stored.tags, replacements: built.replacements,
@@ -352,7 +359,8 @@ export async function prepareSegmentedSpliceMutation(engine: BrainEngine, row: W
       apply: async tx => {
         await tx.createVersion(row.slug, source);
         applied = await applySegmentedBody(tx, { slug: row.slug, sourceId: row.source_id, pageId, prepared, promotion: false, retireMaxRows: flipRetireMaxRows,
-          meta: { title: stored.page.title, type: stored.page.type, frontmatter: frontmatter as never, page_kind: page.pageKind as never } });
+          meta: { title: stored.page.title, type: stored.page.type, frontmatter: frontmatter as never, page_kind: page.pageKind as never,
+            content_author: row.authority.remote ? `mcp:${row.operation}` : null } });
         const lowered = storedTier ? await recordAgentPageLowering(tx, row, { tier: storedTier, revision: stored.revision }) : null;
         if (applied.complete) await sealSegmentedPage(tx, pageId);
         if (gate) await recordPageGateReceipt(tx, { slug: row.slug, sourceId: row.source_id, assessment: gate, requestId: row.id });

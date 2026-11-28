@@ -31,6 +31,7 @@ import { listLiveLocks } from '../core/db-lock.ts';
 import { drainProjections, queuePageProjection } from '../core/page-state/projections.ts';
 import { carryChunkMetadata } from '../core/embed-stale.ts';
 import { normalizeAliasList } from '../core/search/alias-normalize.ts';
+import { withReservedConfigWrite } from '../core/config-snapshot.ts';
 
 interface MigrateOpts {
   targetEngine: 'postgres' | 'pglite';
@@ -398,7 +399,8 @@ export const MIGRATE_CONFIG_ENGINE_LOCAL_KEYS: ReadonlySet<string> = new Set([
  * Copy every DB-plane config row except the engine-local denylist above.
  * Subsumes the old 3-key allowlist (embedding_model / embedding_dimensions /
  * chunk_strategy — schema metadata recording what the schema was sized
- * with); those still copy, now alongside everything else.
+ * with); those still copy, now alongside everything else. The reserved agent-policy
+ * rows (an owner approval checks its own digest) copy unchanged too.
  */
 export async function copyMigrationConfig(
   source: BrainEngine,
@@ -408,14 +410,16 @@ export async function copyMigrationConfig(
     'SELECT key, value FROM config ORDER BY key');
   const skipped: string[] = [];
   let copied = 0;
-  for (const row of rows) {
-    if (MIGRATE_CONFIG_ENGINE_LOCAL_KEYS.has(row.key)) {
-      skipped.push(row.key);
-      continue;
+  await withReservedConfigWrite(async () => {
+    for (const row of rows) {
+      if (MIGRATE_CONFIG_ENGINE_LOCAL_KEYS.has(row.key)) {
+        skipped.push(row.key);
+        continue;
+      }
+      await target.setConfig(row.key, row.value);
+      copied++;
     }
-    await target.setConfig(row.key, row.value);
-    copied++;
-  }
+  });
   return { copied, skipped };
 }
 
@@ -511,10 +515,12 @@ export async function copyPageToTarget(
   // when a re-run's target row already holds an older non-empty body.
   // #6286: the full row travels: origin, kind and provenance columns `Page` does not carry are read from the source row.
   const [row] = await source.executeRaw<{ page_kind: PageKind | null; source_path: string | null; effective_date: Date | string | null; effective_date_source: EffectiveDateSource | null;
-    import_filename: string | null; source_kind: string | null; source_uri: string | null; ingested_via: string | null; ingested_at: Date | string | null; sealed: boolean }>(
+    import_filename: string | null; source_kind: string | null; source_uri: string | null; ingested_via: string | null; ingested_at: Date | string | null; sealed: boolean;
+    content_author: string | null }>(
     `SELECT page_kind,source_path,effective_date,effective_date_source,import_filename,source_kind,source_uri,ingested_via,ingested_at,
+            CASE WHEN content_author_hash = content_hash AND content_hash = $3 THEN content_author END AS content_author,
             text_projection_revision IS NOT DISTINCT FROM knowledge_revision AS sealed
-       FROM pages WHERE slug=$1 AND source_id=$2`, [page.slug, page.source_id ?? 'default']);
+       FROM pages WHERE slug=$1 AND source_id=$2`, [page.slug, page.source_id ?? 'default', page.content_hash ?? null]);
   const asDate = (value: Date | string | null | undefined) => value == null ? null : value instanceof Date ? value : new Date(value);
   await target.putPage(page.slug, nullifyUndefinedColumns({
     type: page.type,
@@ -524,8 +530,9 @@ export async function copyPageToTarget(
     frontmatter: page.frontmatter,
     content_hash: page.content_hash,
     ...(row ? { page_kind: row.page_kind ?? undefined, source_path: row.source_path, effective_date: asDate(row.effective_date), effective_date_source: row.effective_date_source,
-      import_filename: row.import_filename, source_kind: row.source_kind, source_uri: row.source_uri, ingested_via: row.ingested_via } : {}),
-  }), { ...sourceOpts, allowEmptyOverwrite: true });
+      import_filename: row.import_filename, source_kind: row.source_kind, source_uri: row.source_uri, ingested_via: row.ingested_via,
+      content_author: row.content_author } : {}),
+  }), { ...sourceOpts, allowEmptyOverwrite: true, ...(row ? { exactContentAuthor: true } : {}) });
   await target.setPageAliases(page.slug, page.source_id ?? 'default', normalizeAliasList(page.frontmatter?.aliases));
 
   // #4527: putPage stamps created_at/updated_at with now() (PageInput has no

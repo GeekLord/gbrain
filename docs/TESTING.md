@@ -134,8 +134,11 @@ pass, `run-serial-tests.sh` pooled runs and rescues, `run-slow-tests.sh`,
 run attempt, exit code), `<id>.files` (the assigned files) and Bun's native
 JUnit report. `GBRAIN_TEST_RECEIPT_LANE` overrides the runner's lane name.
 `scripts/lib/test-env.sh` (`receipts_init`) reads both variables and unsets
-them, so tests and nested runners never inherit them. `bun run test` writes
-receipts to `.context/test-receipts/` by default, cleared per run.
+them, so tests and nested runners never inherit them. `run-with-receipt.sh`
+also reads and unsets `GBRAIN_TEST_RECEIPT_ARM`, the receipt's arm, so matrix
+cells that run one lane and file (the OpenClaw versions) stay separate
+identities. `bun run test` writes receipts to `.context/test-receipts/` by
+default, cleared per run.
 
 `bun run verify` records each check as pass, fail, timeout or skip in
 `<log dir>/outcomes.tsv` and in a JUnit receipt. A check that skips itself
@@ -342,7 +345,9 @@ that no longer apply at `<head>` are audited at the merge commit itself.
 
 Results use the helper's vocabulary (`discriminates`, `does_not_discriminate`,
 `vacuous_failure`) plus `setup_failed`, `conflict` and `not_audited`, with a
-reason. Human verdicts (`accept`, `rework`, `reject`, `not_yet_proven`) live in
+reason. A nonzero run with no individual Bun `(fail) <name>` lines is
+`vacuous_failure`, even when Bun's summary counts an unhandled error as a
+failure. Human verdicts (`accept`, `rework`, `reject`, `not_yet_proven`) live in
 a separate `--verdicts` file and print in their own column. It also runs
 `wave-security-scan` (range and each PR) and `check:postgres-lanes` (head and
 each trial merge) from the trusted checkout; `--skip-security` and
@@ -425,6 +430,7 @@ Test command tiers, each with a clear scope:
 | `bun run test:e2e` | Real Postgres E2E. Requires Docker + `DATABASE_URL`. Sequential within a shard; `SHARD=N/M` fans out against separate databases (ci-local runs 4 containers). Activates the PGLite snapshot like every other runner (per-file cold-path opt-outs where the test asserts the path TO post-initSchema state), exporting it as an ABSOLUTE path so CLI children spawned with varying cwd still find it. | ~5-10min | Pre-ship; nightly. |
 | `bun run test:compile-smoke` | Self-update integrity verify under a REAL `bun build --compile` binary, offline; also runs unconditionally in the serial lane. The unit suite mocks the network seams; this proves the dependency-free crypto/base64/JSON verify path survives compilation — the failure mode `sigstore-js` would have hit. | under 1s (one small compile) | When touching `src/core/binary-self-update.ts`; pre-ship on self-update changes. |
 | `bun run regen:all` | Regenerates every generated artifact (schema, migrations registry, error-code docs, protocol blocks, tool catalog, skills manifest, structural suites, `llms.txt` last, and the others in `scripts/regen-all.ts`) offline and keyless, and lists what changed; a second run changes nothing. `--check` is read-only and runs in `verify` as `check:regen-all`. `--goldens` also regenerates the offline contract goldens, a deliberate act each PR justifies; Postgres goldens are named with their own commands. | about a minute | After any change a freshness check flags; before `/ship`. |
+| `bun scripts/check-bytecode-parity.ts` | Builds the release compile line (read from `.github/workflows/release.yml`) for this host twice, as written and without `--bytecode --format=esm`, then runs a fixed command set (version, help, init, put, get, list, search, embed, query against a loopback embeddings stub, doctor, a `serve` MCP `tools/list`, `setup claude-code`, the skill-resolver hook) on a temporary PGLite brain with each binary. stdout, stderr and exit code must match and every command must succeed; only clock, ids, ports and timings are masked, and clock-driven decimals (7 or more places, such as recency scores) are compared within 1e-5; a failing step prints a short masked diff of the two outputs (`BYTECODE_PARITY_RAW=1` compares raw text, `--keep` keeps the work directory). CI runs it as a step of test.yml's verify job, not through `verify`'s CHECKS; `test/scripts/check-bytecode-parity.test.ts` pins the flags on every shipped compile line. | ~40s | When changing the compile line or anything the compiled binary prints. |
 | `bun run test:agent-voice` | The agent-voice recipe's vitest unit suite (`recipes/agent-voice/tests/unit`), via `scripts/test-agent-voice.sh`: installs pinned vitest + ws into a temporary prefix and links it as the recipe's `node_modules` for the run. Needs node + npm and registry access. CI runs it in test.yml's verify job. | ~10s | When touching `recipes/agent-voice/`. |
 | `scripts/ship-remote-tests.sh` | Pushes the branch, dispatches `test.yml` (or `--workflow`) on GitHub's runners for that branch or `--ref`, and waits with `gh run watch --exit-status`, so its exit code is the run's. Needs an authenticated `gh`; unlike `ci:ubicloud` it needs no Ubicloud credential and runs the workflow's own job inventory. | one CI run | Offloading the suite from a saturated local machine. |
 | `bun run test:profile` | Reads a captured `bun test` log on stdin and prints the N slowest tests (`-n N`, default 10): `bun test 2>&1 \| bun run test:profile`. | seconds | Finding slow tests to fix or demote to `*.slow.test.ts`. |
@@ -544,7 +550,7 @@ above, and each E2E file keeps a PGLite arm in the unit lane.
 ### Rust parity arm (opt-in)
 
 Every `test/engine-parity/` file can add a Rust engine to its arms, next to PGLite and (with `DATABASE_URL`) Postgres.
-Nothing selects the Rust engine outside the test, and without the flag the suite runs as before.
+Without the flag the suite runs as before, on PGLite and (with `DATABASE_URL`) Postgres.
 
 ```bash
 bun run rust:build                                              # writes the addon under rust/target/addon
@@ -562,6 +568,12 @@ GBRAIN_TEST_RUST_ARM=1 bun test test/engine-parity/search.test.ts   # one file; 
   removed. A thrown error never passes. `search.tsv` is empty today.
 - Rules: `test/engine-parity/rust-arm.ts` header; what the engine serves and refuses: `docs/ENGINES.md` ("What a Rust
   brain serves now").
+- CLI parity: `test/rust-cli-parity.serial.test.ts` runs each read command through the real CLI on a PGLite brain and on
+  a brain whose config says `engine: 'rust'`, both filled from `test/fixtures/rust-cli-parity-brain/`. A command ends
+  `equal`, `refused` with the typed `engine_capability_missing`, or `diverged` (another answer or an untyped error),
+  and only `diverged` fails. It needs the addon from `bun run rust:build` and skips without it;
+  `GBRAIN_TEST_REQUIRE_RUST_ADDON=1` makes a missing addon an error, which the Rust engine workflow sets for this test
+  and `test/rust-cli-source-target.test.ts`.
 
 ### Native writer locks
 
@@ -686,7 +698,7 @@ evidence for a change before it merges. `test.yml`'s security matrix,
 
 ### Keeping CI partitions balanced
 
-Required CI runs 40 weighted unit workers, four serial workers with bounded
+Required CI runs 46 weighted unit workers, four serial workers with bounded
 per-file pools, and up to eight selected E2E workers. E2E selection and exclusions
 run once before setup; the resulting file lists are frozen and executed against
 separate Postgres services. An explicit empty selection launches no tests;
@@ -712,11 +724,24 @@ share passes 5% (unit) or 10% (serial, E2E), warns on pull requests and pushes
 and fails the scheduled run, printing the lane's miner command:
 
 ```bash
-bun run weights:mine --lane unit --run <run> --run <run> ...
-bun run weights:mine --lane serial --run <run> --run <run> ...
+bun run weights:mine --lane unit --latest 5 --coverage-only
+bun run weights:mine --lane serial --latest 5
 bun run weights:mine --lane e2e --run <successful-e2e-run>
 bun run weights:mine --lane e2e --e2e-profile full --run <successful-full-corpus-run>
 ```
+
+`--latest N` takes the newest N completed master runs of the lane's workflow
+whose lane jobs all succeeded, whatever the rest of the run concluded (a nightly
+that a weight-coverage failure turned red still measured its unit jobs). It
+pages past runs that skipped the lane (a push that reused a full run of its tree)
+or ran only part of it, up to 500 runs, so a refresh is a median without run IDs
+collected by hand. `--coverage-only`
+keeps every existing weight, drops untracked files and adds only the files the
+map lacks, appending the runs behind them to the `coverageOnly` list in the metadata,
+which then says `mergeExisting: true` and keeps a full-profile E2E run's hashes
+under `baseline`: it closes a coverage gap when a full unit refresh would push
+shards over `UNIT_SHARD_BUDGET_MS`. It never refreshes a stale weight; a full
+refresh is the same command without it.
 
 The miner accepts `--from-file` or stdin for timestamped GitHub-format logs and
 `--out` for inspection before replacing a checked-in map. Unit timing uses only
@@ -1067,7 +1092,7 @@ there even though they pass on Linux and macOS.
 
 ### CI vs local: intentionally divergent file sets
 
-- **CI matrix** (`.github/workflows/test.yml`) runs 40 `scripts/test-shard.sh` shards, two per runner, split by weight-aware LPT bin-packing (`scripts/sharding.ts`; unweighted files get the p75 weight) and includes `*.slow.test.ts` files without a dedicated job, plus keyless-allowlisted `evals/**/*.test.ts` (`test/scripts/evals-collection.test.ts`). Shards keep planned file order (`test-shard.sh --dry-run-list <i> 18`) and print their predicted weight (`sharding.ts --sum`). Every Bun job activates the PGLite schema snapshot (built in-runner, cached across jobs; the runner's hash check is authoritative). Serial files run across four `serial-tests` workers via `bun run test:serial`; `verify`, `typecheck` and the BrainBench memory-conformance gate (`scripts/ci-brainbench-gate.sh`, compared against `evals/brainbench/baselines/main.json`) have their own jobs, all aggregated by `test-status`. `e2e.yml` aggregates through `e2e-status`, with jsonb-parity gating Tier 2's token spend; scheduled runs also require the full-corpus lanes. Both aggregates reject failures, cancellations and unexpected skips. Only a master push and the remote gate reuse results: those of a passed full run of the exact tree (`scripts/ci-reuse.ts`). CI is the ground truth for "did everything pass."
+- **CI matrix** (`.github/workflows/test.yml`) runs 46 `scripts/test-shard.sh` shards, two per runner, split by weight-aware LPT bin-packing (`scripts/sharding.ts`; unweighted files get the p75 weight; files that peak at 2.5 GB resident alone, `MEMORY_HEAVY_UNIT_FILES`, go to different runners first) and includes `*.slow.test.ts` files without a dedicated job, plus keyless-allowlisted `evals/**/*.test.ts` (`test/scripts/evals-collection.test.ts`). Shards keep planned file order (`test-shard.sh --dry-run-list <i> 18`) and print their predicted weight (`sharding.ts --sum`). Every Bun job activates the PGLite schema snapshot (built in-runner, cached across jobs; the runner's hash check is authoritative). Serial files run across four `serial-tests` workers via `bun run test:serial`; `verify`, `typecheck` and the BrainBench memory-conformance gate (`scripts/ci-brainbench-gate.sh`, compared against `evals/brainbench/baselines/main.json`) have their own jobs, all aggregated by `test-status`. `e2e.yml` aggregates through `e2e-status`, with jsonb-parity gating Tier 2's token spend; scheduled runs also require the full-corpus lanes. Both aggregates reject failures, cancellations and unexpected skips. Only a master push and the remote gate reuse results: those of a passed full run of the exact tree (`scripts/ci-reuse.ts`). CI is the ground truth for "did everything pass."
 - **Local fast loop** (`scripts/run-unit-shard.sh` via the parallel wrapper) uses the same weighted partitioner as CI and EXCLUDES `*.slow.test.ts` AND `*.serial.test.ts`. Each shard runs its complete ordered selection with a fresh Bun process per file, without adding workers. Later groups still run after failures; missing summaries or file-completion evidence fail the shard. Local trades coverage for inner-loop speed; CI catches what local skips.
 
 `test/scripts/run-unit-shard.test.ts` pins what the local loop includes, and
@@ -1099,8 +1124,8 @@ normalizes `COVERAGE_DIR` to an absolute path before moving `HOME`, and
 coverage lane). Both names avoid the `GBRAIN_` prefix so the env scrub keeps
 them.
 
-**Two corpora.** `prCorpus` is the 46 coverage-collecting lanes in
-`test.yml` (40 unit shards, 4 serial partitions, `slow-entity-resolve-perf` and
+**Two corpora.** `prCorpus` is the 52 coverage-collecting lanes in
+`test.yml` (46 unit shards, 4 serial partitions, `slow-entity-resolve-perf` and
 `slow-brainbench-e2e`), identical on every PR; the gates run against it.
 `fullCorpus` is the nightly (or manual `full_corpus=true`) set in `e2e.yml`:
 `coverage-full-{unit,serial,slow,e2e}` plus `coverage-full-report`, every lane
@@ -1160,10 +1185,10 @@ spawned CLI processes undercounts, and `src/cli.ts` carries a permanent
 record; the summary lists those as a count and a sorted list, never a
 percentage.
 
-**Local smoke** (one shard of 40; this checks the plumbing, not the number):
+**Local smoke** (one shard of 46; this checks the plumbing, not the number):
 
 ```bash
-COVERAGE_DIR=$PWD/.coverage bash scripts/test-shard.sh 1 40 \
+COVERAGE_DIR=$PWD/.coverage bash scripts/test-shard.sh 1 46 \
   && bun scripts/merge-lcov.ts --out-lcov .coverage/merged.lcov --out-json .coverage/summary.json .coverage \
   && bun scripts/render-coverage-summary.ts --summary .coverage/summary.json --structural scripts/structural-suites.tsv
 ```

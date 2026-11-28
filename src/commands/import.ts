@@ -49,9 +49,12 @@ import { acceptedPendingReceipt } from '../core/persistence/accepted-pending.ts'
 import { estimateCostFromChars, lookupEmbeddingPrice } from '../core/embedding-pricing.ts';
 import { getEmbeddingModel } from '../core/ai/gateway.ts';
 import { managedRootMarkerFor } from '../core/persistence/root-registry.ts';
-import { readManagedMode } from '../core/persistence/ownership.ts';
+import { readManagedModeTyped } from '../core/persistence/ownership.ts';
+import { requestSignal } from '../core/request-signal.ts';
+import { isEngineCapabilityRefusal } from '../core/engine-capability-refusal.ts';
 import { readPageBodyPolicy } from '../core/page-body/limits.ts';
 import { importSourceRefusal } from './import-source-refusal.ts';
+import { wrapShadowSibling } from '../shadow/state.ts';
 
 /** Return a refusal when an import target lies outside every admitted root. */
 export function configuredRootImportError(dir: string, configuredRoots: string[]): string | null {
@@ -272,7 +275,7 @@ export async function runImport(
     commit?: string; /** GBRA-217: a full sync's reason and history-gap note per file (absolute path) for the snapshot its import archives. */ history?: (filePath: string) => import('../core/page-state/versions.ts').VersionHistory | undefined;
     strategy?: SyncStrategy;
     sourceId?: string;
-    managedBookmark?: boolean;
+    managedBookmark?: boolean; /** #8079: managed plain-directory sync, whose imports never replace a database-only edit. */ plainDirectorySync?: boolean;
     /** GST-2462: the run the privacy_label_ignored notice names. */ noticeRun?: 'sync';
     /** Paths the caller keeps out of this run (#5988 holds, #8620 reserved skill paths); skipped without importing, not failures. */
     heldPaths?: Pick<ReadonlySet<string>, 'has'>;
@@ -519,7 +522,7 @@ export async function runImport(
   const ownedRefusal = (await import('./import-source-refusal.ts')).ownedFolderImportRefusal(dir); if (ownedRefusal) throw new ImportAbortError(ownedRefusal.message, 1, undefined, ownedRefusal);
   if (args.includes('--calls')) return (await import('./import-calls.ts')).runCallImport(engine, dir, args, { sourceId, json: jsonOutput });
 
-  const managedImport = await readManagedMode(engine);
+  const managedImport = await readManagedModeTyped(engine);
   if (managedImport && dir !== resolve(dirArg)) throw symlinkedRootAbort(dirArg, dir);
   const preAdmission = managedImport && !opts.managedBookmark && !currentCompanyBrainSync(sourceId) ? await managedImportWriteThroughRefusal(engine, sourceId ?? 'default') : null;
   if (preAdmission) {
@@ -744,7 +747,7 @@ export async function runImport(
       // unreachable when the gate is off; defense-in-depth check anyway.
       if (settled?.status === 'rejected') throw settled.reason;
       const result = settled ? settled.value : company ? await importCompanyBrainFile(eng, filePath, sourceId!) : managedImport
-        ? await importManagedFile(eng, filePath, importRelPath, { noEmbed, sourceId, activePack: importActivePack, signal, slugRoot: opts.slugRoot })
+        ? await importManagedFile(eng, filePath, importRelPath, { noEmbed, sourceId, activePack: importActivePack, signal, slugRoot: opts.slugRoot, plainDirectorySync: opts.plainDirectorySync })
         : isImageFilePath(relativePath) && process.env.GBRAIN_EMBEDDING_MULTIMODAL === 'true'
         ? await importImageFile(eng, filePath, importRelPath, { noEmbed, sourceId })
         : await importFile(eng, filePath, importRelPath, { noEmbed, sourceId, activePack: importActivePack, bodyPolicy, firstCommitAt: firstCommits?.get(filePath), history: opts.history?.(filePath) });
@@ -798,6 +801,9 @@ export async function runImport(
         if (e !== signal.reason && !(e instanceof Error && e.name === 'AbortError')) throw e;
         return;
       }
+      // An engine that cannot run this import refuses it; that is not this file's failure, so no file is listed as failed and no
+      // ledger row is written for it (the run ends with the refusal, as master's first raw statement ended it on a Rust brain).
+      if (isEngineCapabilityRefusal(e)) throw e;
       // #5600: an accepted managed import still publishing is not a failure; the next run resumes its request.
       if (acceptedPendingReceipt(e)) { skipped++; console.error(`  Pending: ${relativePath} was accepted and is still publishing; rerun to confirm it.`); }
       else if (await reportFileResult(opts.onFileResult, importRelPath, filePath, { status: 'error', error: e instanceof Error ? e.message : String(e) }) === 'held') { skipped++; completed.add(relativePath); } else {
@@ -856,7 +862,7 @@ export async function runImport(
 
   async function processBatch(eng: BrainEngine, batch: string[]) {
     const settled = batch.length > 1 && !signal?.aborted ? await settleManagedImportBatch(eng, batch, file => opts.slugRoot ? relative(opts.slugRoot, file)
-      : relative(importRoot, file), rel => !!opts.heldPaths?.has(rel), { noEmbed, sourceId, activePack: importActivePack, signal, slugRoot: opts.slugRoot }) : undefined;
+      : relative(importRoot, file), rel => !!opts.heldPaths?.has(rel), { noEmbed, sourceId, activePack: importActivePack, signal, slugRoot: opts.slugRoot, plainDirectorySync: opts.plainDirectorySync }) : undefined;
     for (const [i, file] of batch.entries()) await processFile(eng, file, settled?.[i]);
   }
   let workerError: unknown;
@@ -888,7 +894,7 @@ export async function runImport(
             if (signal?.aborted) break;
             const eng = new PostgresEngine();
             await connectWithRetry(eng, { database_url: databaseUrl, poolSize: workerPoolSize }, { retryConnectTimeout: true });
-            workerEngines.push(eng);
+            workerEngines.push(wrapShadowSibling(engine, eng)); // shadow mode samples, follows and observes a worker's writes as the primary's
           }
 
           // Thread-safe queue: atomic index counter (JS is single-threaded; the
@@ -971,19 +977,14 @@ export async function runImport(
   // compares to import size; warns at >=10% untyped. The doctor
   // schema_pack_consistency check (also T7) gives the persistent surface.
   // Best-effort: query failure is non-fatal.
-  if (imported > 0) {
+  // Skipped for a cancelled request: the count statement used to refuse one, and `getStats` would send its queries.
+  if (imported > 0 && !requestSignal()?.aborted) {
     try {
       const sid = sourceId ?? 'default';
-      const rows = await engine.executeRaw<{ total: string | number; untyped: string | number }>(
-        `SELECT
-           COUNT(*)::text AS total,
-           COUNT(*) FILTER (WHERE type IS NULL OR type = '')::text AS untyped
-         FROM pages
-         WHERE source_id = $1 AND deleted_at IS NULL`,
-        [sid],
-      );
-      const total = Number(rows[0]?.total ?? 0);
-      const untyped = Number(rows[0]?.untyped ?? 0);
+      // pages.type is NOT NULL, so the untyped pages are the empty-type bucket.
+      const stats = await engine.getStats({ sourceId: sid });
+      const total = Number(stats.page_count);
+      const untyped = Number(stats.pages_by_type[''] ?? 0);
       if (total > 0 && untyped / total >= 0.1) {
         const pct = ((untyped / total) * 100).toFixed(1);
         console.error(
@@ -1140,10 +1141,7 @@ export async function runImport(
   const totalMalformed = malformedExcluded.length + malformedFileSkips;
   if (sourceId && failures.length === 0 && totalMalformed === 0 && !opts.managedBookmark && !managedImport) {
     try {
-      const [row] = await engine.executeRaw<{ local_path: string | null; config: unknown }>(
-        `SELECT local_path, config FROM sources WHERE id = $1`,
-        [sourceId],
-      );
+      const row = await engine.readSourceRow(sourceId);
       const { sourceConfigHasRemoteUrl, parseSourceConfig } = await import('../core/sources-load.ts');
       // Connector-managed sources (config.kind: github/google, v0.47 API-backed
       // shapes) own their last_sync_at via the connector's sync path — a google
@@ -1181,7 +1179,9 @@ export async function runImport(
       }
       if (row?.local_path && coversRegisteredRoot && !sourceConfigHasRemoteUrl(row.config) && !isGitTracked && !isConnectorManaged) {
         throwIfInterrupted();
-        await engine.executeRaw(`UPDATE sources SET last_sync_at = now() WHERE id = $1`, [sourceId]);
+        // A typed member, not raw SQL: an engine that runs no SQL (Rust) would refuse the statement and the catch
+        // below would swallow it, leaving the folder source "never synced".
+        await engine.markSourceSynced(sourceId);
       }
     } catch (error) {
       if (error instanceof ImportAbortError) throw error;

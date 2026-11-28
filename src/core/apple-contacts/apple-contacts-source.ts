@@ -42,6 +42,8 @@ import { connectorDbCursorKey, readConnectorDbCursor, writeConnectorDbCursor } f
 import { connectorRender } from '../connectors/connector-text.ts';
 import { afterConnectorPublish, connectorDryRunResult, deleteConnectorPage, publishConnectorPage, runScoped, type ConnectorPublishCtx, type PublishSummary } from '../connectors/api-source.ts';
 import { slugifyPath } from '../sync.ts';
+import { decidedSets } from '../entities/identity-decisions.ts';
+import type { IdentityMemberRef } from '../engine-sql/identity-decisions.ts';
 import { applyContactPage } from '../contact-page-apply.ts';
 import { listEntityIdentities } from '../entity-identity.ts';
 import { parsePhoneCountryCode, PHONE_COUNTRY_CODE_CONFIG_KEY } from '../phone-key.ts';
@@ -140,6 +142,7 @@ async function runInner(engine: BrainEngine, sourceId: string, cfg: AppleContact
   const holds = await ConnectorHoldSession.open(engine, sourceId, managed, emptyState(), state.item_holds, { full: opts.full });
   const ctx: ConnectorPublishCtx = { engine, sourceId, managed, summary, label: 'Apple Contacts', tag: APPLE_CONTACTS_KIND, record: cfg.record, dir: cfg.dir, gated: true };
   const reviews = new Map((await readIdentityReviews(engine, sourceId)).map(r => [r.contact_id, r]));
+  let apart: IdentityMemberRef[][] | undefined;
   const holders = await readPersonFactHolders(engine, sourceId);
   /** Contacts whose person-page facts this run decides: contact id → the person page it may write (null: none). */
   const factTargets = new Map<string, { person: { source_id: string; slug: string }; fields: PersonFields } | null>();
@@ -190,7 +193,11 @@ async function runInner(engine: BrainEngine, sourceId: string, cfg: AppleContact
       await publishConnectorPage(ctx, { relPath, markdown: connectorRender(markdown, { path: relPath, [APPLE_CONTACT_ID_KEY]: id }),
         commitMessage: `apple-contacts(${sourceId}): ${relPath}`, privateMessage: `apple-contacts(${sourceId}): ${relPath} is private; database only`,
         retireReason: 'the contact changed in Apple Contacts' });
+      const slug = slugifyPath(relPath);
+      const landed = managed ? await managed.page(slug) : await engine.getPage(slug, { sourceId });
+      if (landed?.frontmatter?.[APPLE_CONTACT_ID_KEY] !== id) return null;
       onWrite(relPath);
+      return slug;
     },
     remove: removePage,
     skippedHandAuthored: (relPath: string) => log(`[apple-contacts] skipping hand-authored ${relPath}`),
@@ -199,7 +206,8 @@ async function runInner(engine: BrainEngine, sourceId: string, cfg: AppleContact
 
   /** Link (or unlink) one contact page and decide its person-page facts from what the page now holds. */
   const decideIdentity = async (id: string, slug: string, emails: string[], phones: string[], fields: PersonFields) => {
-    const link = await linkContactPage(engine, sourceId, slug, emails, phones, countryCode);
+    apart ??= decidedSets(await engine.listIdentityDecisions()).apart;
+    const link = await linkContactPage(engine, sourceId, slug, emails, phones, countryCode, { apart });
     if (link.outcome === 'many') reviews.set(id, { contact_id: id, slug, candidates: link.candidates! });
     else reviews.delete(id);
     let target: { source_id: string; slug: string } | null = null;
@@ -220,7 +228,7 @@ async function runInner(engine: BrainEngine, sourceId: string, cfg: AppleContact
     }
     pending.delete(contact.id);
     let written: string | null = null;
-    await applyContactPage(contact.id, false, io(contact.id, render, relPath => { written = relPath; }));
+    if (!await applyContactPage(contact.id, false, io(contact.id, render, relPath => { written = relPath; }))) return;
     touched.add(contact.id);
     const slug = written !== null ? slugifyPath(written) : null;
     if (slug) await decideIdentity(contact.id, slug, render.data.emails, render.data.phones, { company: contact.organization, jobTitle: contact.jobTitle, groups: contact.groups });

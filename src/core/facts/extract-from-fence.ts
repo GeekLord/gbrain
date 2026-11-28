@@ -50,7 +50,9 @@ import { computeEffectiveDate } from '../effective-date.ts';
  * was. A held row (GST-2492: its entity has no page yet, on a strict source) projects the entity its cell names.
  */
 export { UNATTRIBUTED_MEMORY_SLUG } from '../facts-fence.ts';
-import { isHoldingSlug } from '../facts-fence.ts';
+import { folderHoldingSlug, isHoldingSlug, UNATTRIBUTED_MEMORY_SLUG } from '../facts-fence.ts';
+import { facetOfMetric, PROFILE_METRIC_PREFIX } from '../profile/facets.ts';
+import { MEMBER_PAGE_PREFIX, RESERVED_OWNER_SLUG } from '../access/principals.ts';
 
 export const FACT_DATE_SOURCES: ReadonlySet<string> = new Set(['event_date', 'date', 'published', 'filename']);
 
@@ -150,7 +152,7 @@ export interface ExtractFromFenceOpts {
    * Precedence chain:
    *   1. Explicit `validFrom:` in the fence row (today's behavior, preserved).
    *   2. `pageEffectiveDate` when set.
-   *   3. `undefined` → engine.insertFact defaults to now() at insert time.
+   *   3. Otherwise null: the event date is unknown (#10288), stored NULL.
    *
    * Optional because `facts/fence-write.ts` calls this from a context
    * with no `Page` object available (Codex F6). Null and undefined are
@@ -211,6 +213,9 @@ export function normalizeMetricLabel(raw: string | undefined | null): string | u
   if (raw === undefined || raw === null) return undefined;
   const trimmed = raw.trim().toLowerCase();
   if (!trimmed) return undefined;
+  // Lane 3 P1: a profile.<facet> metric with a valid facet (profile/facets.ts) is kept as written; any other profile.* label normalizes as before.
+  const facet = facetOfMetric(trimmed);
+  if (facet) return PROFILE_METRIC_PREFIX + facet;
   const seed = METRIC_NORMALIZATION_MAP.get(trimmed);
   if (seed) return seed;
   // Collapse runs of whitespace to single underscore, strip non-alphanumeric
@@ -228,6 +233,7 @@ const RAISE_STEM = /^(?:(?:pre_)?seed|series_[a-z]|bridge|fundraise|fundraising|
  * share one tag. A valuation, price, cap, share, count, runway, loan, interest or target label never folds. A fence row's label is kept as written.
  */
 export function normalizeExtractedMetricLabel(raw: string | undefined | null): string | undefined {
+  if (facetOfMetric(raw)) return undefined; // only remember's facet creates a profile row
   const label = normalizeMetricLabel(raw);
   if (!label || label === 'fundraise' || NOT_A_RAISE.test(label)) return label;
   return RAISE_STEM.test(label) ? 'fundraise' : label;
@@ -252,9 +258,9 @@ export function extractFactsFromFenceText(
   const pageDateFallback = opts.pageEffectiveDate ?? undefined;
 
   return facts.map(f => {
-    // v0.35.4 (D-ENG-1) valid_from precedence: fence > pageEffectiveDate > engine default (now).
+    // v0.35.4 (D-ENG-1) valid_from precedence: fence > pageEffectiveDate > unknown (NULL, #10288).
     const fenceDate = parseValidDate(f.validFrom);
-    const validFrom = fenceDate ?? pageDateFallback ?? undefined;
+    const validFrom = fenceDate ?? pageDateFallback ?? null;
 
     // valid_until derivation. Three branches:
     //   1. Explicit validUntil in the fence → honor as-is.
@@ -285,10 +291,17 @@ export function extractFactsFromFenceText(
     // under nowOverride. Active rows leave it null.
     const expiredAt: Date | null = !f.active ? (validUntil ?? today) : null;
 
+    const entitySlug = isHoldingSlug(slug) ? f.entity ?? null : slug;
+    const metric = normalizeMetricLabel(f.claimMetric) ?? null;
+    // Lane 3 P1: a profile metric counts only on the profile's own page or, for the owner's or a member's page, the holding
+    // page remember would put it on.
+    const heldProfile = entitySlug !== null && (entitySlug === RESERVED_OWNER_SLUG || entitySlug.startsWith(MEMBER_PAGE_PREFIX));
+    const profileHome = entitySlug !== null && (entitySlug === slug || heldProfile && (slug === UNATTRIBUTED_MEMORY_SLUG || folderHoldingSlug(entitySlug) === slug));
+
     const row: FenceExtractedFact = {
       fact: f.claim,
       kind: f.kind as FactKind,
-      entity_slug: isHoldingSlug(slug) ? f.entity ?? null : slug,
+      entity_slug: entitySlug,
       visibility: f.visibility as FactVisibility,
       notability: f.notability,
       context: f.context ?? null,
@@ -306,7 +319,7 @@ export function extractFactsFromFenceText(
       // v0.35.4 (D-CDX-5) — typed-claim threading. Metric label normalized
       // here so the DB-side index hits use the canonical name; value /
       // unit / period stored verbatim.
-      claim_metric: normalizeMetricLabel(f.claimMetric) ?? null,
+      claim_metric: facetOfMetric(metric) && !profileHome ? null : metric,
       claim_value:  f.claimValue ?? null,
       claim_unit:   f.claimUnit ?? null,
       claim_period: f.claimPeriod ?? null,

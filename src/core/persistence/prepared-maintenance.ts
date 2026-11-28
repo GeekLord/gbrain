@@ -42,6 +42,7 @@ import { lowerToDerivedTier, readDerivationDeclaration, recordTaintEdges, type D
 import { derivationWriteTrust, raisePageLabelGuard, recordAgentPageLowering, storedPageTier } from '../trust/page-write.ts';
 import { sameInstantTies } from '../facts/claim-ties.ts';
 import type { LabelEdit } from './label-edit.ts';
+import { refuseRuleFactTarget } from '../rules/admission.ts';
 import { factPreimages, recordConsolidationGeneration } from '../generations/adapters/fact-rows.ts';
 
 export interface MaintenanceAuthority {
@@ -237,6 +238,9 @@ export function maintenanceDriftRefusal(sourceId: string, slug: string): Operati
  */
 export const PUBLISHES_WITHOUT_FILE: ReadonlySet<string> = new Set(['managed_maintenance_chronicle_event', 'managed_maintenance_chronicle_retire', 'managed_maintenance_retire_stale_atoms',
   'managed_maintenance_retire_ghost_page', 'managed_maintenance_restore_reextract_atom']);
+
+/** GST-3612: `think --take` on a managed brain, a takes_add of the anchor page at the synthesis's derived tier (the take is the derived row). */
+export const THINK_TAKE_INTENT = 'managed_maintenance_think_take';
 
 /** #6696 (A12): `source_changed` / `canonical_file_missing` before admission: the page's recorded file is gone; never a new request. */
 export function maintenanceGhostRefusal(sourceId: string, slug: string): OperationError {
@@ -434,7 +438,7 @@ export async function submitMaintenanceConsolidation(engine: BrainEngine, author
     const observed = cluster.find(f => f.id === fact.id)!;
     if (fact.value.fact !== observed.fact || fact.value.entity_slug !== slug || fact.value.confidence !== observed.confidence ||
       fact.value.source !== observed.source || fact.value.source_session !== observed.source_session ||
-      Date.parse(String(fact.value.valid_from)) !== observed.valid_from.getTime()) {
+      (fact.value.valid_from == null ? null : Date.parse(String(fact.value.valid_from))) !== (observed.valid_from?.getTime() ?? null)) {
       throw opError('revision_conflict', 'The consolidation input changed after clustering.',
         `A fact on ${slug} in '${sourceId}' was edited after clustering; nothing was submitted. The next consolidate run re-clusters the current facts.`);
     }
@@ -560,6 +564,7 @@ const READ_BACK_TEXT: Record<NonNullable<ReturnType<typeof fenceCellReadBackProb
  * their step, and its preparation reads of `facts` run bounded by the remaining budget (`boundedReads`).
  */
 async function prepareFactFenceAdoption(unbounded: BrainEngine, row: WriteRequest, config: GBrainConfig, clock?: ClaimPhaseClock): Promise<PreparedMutation> {
+  refuseRuleFactTarget(row.slug);
   const engine = boundedReads(unbounded, clock);
   const p = row.intent!;
   const facts = p.facts as FactFenceAssignment[];
@@ -665,8 +670,9 @@ async function prepareFactFenceAdoption(unbounded: BrainEngine, row: WriteReques
  * #5575 I2: a maintenance intent that carries a derivation declaration
  * publishes at the declared tier (never above agent_written), lowers its
  * derived row when the publication changed no content column, and records
- * the complete input edges (ENG-7). A consolidation's takes fence edit
- * keeps the entity page's tier (page-prepare's fence-edit rule).
+ * the complete input edges (ENG-7). A consolidation's or a think take's takes
+ * fence edit keeps the entity page's tier (page-prepare's fence-edit rule);
+ * the take row it wrote (`take_id`) is the derived row.
  * #7918: a declaration that is present but unreadable publishes at `unknown`
  * (fail closed) with no input edges. #7917: a page the publication lowered
  * files a `lower_page` proposal the owner sees in `gbrain trust review`.
@@ -676,12 +682,12 @@ export async function prepareMaintenanceMutation(engine: BrainEngine, row: Write
   const trust = derivationWriteTrust(row.intent);
   if (!trust) return prepared;
   const declaration = readDerivationDeclaration(row.intent?.derivation);
-  const consolidation = row.intent?.kind === 'managed_maintenance_consolidate';
+  const takeWrite = row.intent?.kind === 'managed_maintenance_consolidate' || row.intent?.kind === THINK_TAKE_INTENT;
   return { ...prepared, trust, apply: async (tx, preimage) => {
-    const snapshot = consolidation ? null : await tx.readPageSnapshot(row.slug, { sourceId: row.source_id });
+    const snapshot = takeWrite ? null : await tx.readPageSnapshot(row.slug, { sourceId: row.source_id });
     const prior = snapshot ? { tier: await storedPageTier(tx, row.source_id, row.slug), revision: snapshot.revision } : null;
     const outcome = await prepared.apply(tx, preimage);
-    const [derived] = consolidation ? (outcome.take_id ? [{ table: 'takes' as const, id: Number(outcome.take_id) }] : [])
+    const [derived] = takeWrite ? (outcome.take_id ? [{ table: 'takes' as const, id: Number(outcome.take_id) }] : [])
       : (await tx.executeRaw<{ id: number }>('SELECT id FROM pages WHERE source_id=$1 AND slug=$2 AND deleted_at IS NULL', [row.source_id, row.slug]))
         .map(page => ({ table: 'pages' as const, id: Number(page.id) }));
     if (derived) {
@@ -713,6 +719,15 @@ async function prepareMaintenanceKind(engine: BrainEngine, row: WriteRequest, co
   if (row.intent?.kind === 'managed_maintenance_deleted_page_facts_expire') return (await import('../cycle/extract-facts.ts')).prepareDeletedPageFactsExpiry(engine, row);
   if (row.intent?.kind === 'managed_maintenance_takes_reextract') return (await import('../cycle/extract-takes.ts')).prepareTakesReextract(engine, row);
   if (row.intent?.kind === 'managed_maintenance_take_reproject') return (await import('../repair/take-supersession.ts')).prepareTakeReprojection(engine, row);
+  if (row.intent?.kind === THINK_TAKE_INTENT) {
+    const prepared = await prepareTakesMutation(engine, { ...row, operation: 'takes_add', intent: { ...row.intent, kind: 'take' } }, config, undefined, derivationWriteTrust(row.intent));
+    return { ...prepared, apply: async (tx, preimage) => {
+      const outcome = await prepared.apply(tx, preimage);
+      if (outcome.row_num === undefined) return outcome;
+      const [take] = await tx.executeRaw<{ id: number }>('SELECT id FROM takes WHERE page_id=$1 AND row_num=$2', [row.page_id, outcome.row_num]);
+      return take ? { ...outcome, take_id: Number(take.id) } : outcome;
+    } };
+  }
   if (row.intent?.kind === 'managed_maintenance_timeline_extract') return (await import('../../commands/extract-timeline-db.ts')).prepareTimelineExtract(engine, row);
   if (row.intent?.kind === 'managed_maintenance_meeting_timeline') return (await import('../extract-timeline-from-meetings.ts')).prepareMeetingTimeline(engine, row);
   if (row.intent?.kind === 'managed_maintenance_page') {
@@ -761,7 +776,7 @@ async function prepareMaintenanceKind(engine: BrainEngine, row: WriteRequest, co
   const p = row.intent;
   const facts = p.facts as FactSnapshot[];
   const pages = p.pages as EvidencePage[];
-  if (sameInstantTies(facts.map(f => ({ id: f.id, at: Date.parse(String(f.value.valid_from)), metric: (f.value.claim_metric as string | null) ?? null,
+  if (sameInstantTies(facts.filter(f => f.value.valid_from != null).map(f => ({ id: f.id, at: Date.parse(String(f.value.valid_from)), metric: (f.value.claim_metric as string | null) ?? null,
     unit: (f.value.claim_unit as string | null) ?? null, period: (f.value.claim_period as string | null) ?? null }))).length) {
     return { observedRevision: p.expected_revision as string, noop: true, apply: async () => ({ status: 'skipped', reason: 'same_instant_typed_claims', noop: true,
       facts_consolidated: 0, takes_written: 0 }) };
@@ -781,7 +796,7 @@ async function prepareMaintenanceKind(engine: BrainEngine, row: WriteRequest, co
   // The chain closes each fact at its successor's valid_from. A fenced fact is closed in its fence row, published with the
   // take on this page, and its row derives from that cell; an unfenced fact has no fence row and is closed in the database.
   // A fenced fact whose fence is on another page stays open: this publication does not write that file.
-  const chronological = [...facts].sort((a, b) => Date.parse(String(a.value.valid_from)) - Date.parse(String(b.value.valid_from)) || a.id - b.id);
+  const chronological = facts.filter(f => f.value.valid_from != null).sort((a, b) => Date.parse(String(a.value.valid_from)) - Date.parse(String(b.value.valid_from)) || a.id - b.id);
   const closes = consolidationCloses(chronological, f => ({ text: String(f.value.fact), value: f.value.claim_value })).map(({ member, next }) => ({ fact: member, until: String(next.value.valid_from) }));
   const fenceCloses = new Map(closes.filter(c => c.fact.value.row_num !== null && c.fact.value.source_markdown_slug === row.slug)
     .map(c => [Number(c.fact.value.row_num), c]));

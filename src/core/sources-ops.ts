@@ -213,10 +213,16 @@ export interface AddSourceOpts {
     loopsExcludeLabels?: string[];
     /** Managed dir where pages are materialized. */
     dir: string;
-    /** Token acquisition: gbrain vault (default), a token-printing command, or an env var. */
-    access?: 'vault' | 'command' | 'env';
+    /** Token acquisition: gbrain vault (default), a token-printing command, an env var, or mail read through gbrain.io. */
+    access?: 'vault' | 'command' | 'env' | 'gbrainio';
     tokenCommand?: string;
     tokenEnv?: string;
+    /** The gbrainio command line for access 'gbrainio' (`g_gbrainio_command`). */
+    gbrainioCommand?: string;
+    /** One address or @domain per line; their threads become owner-only pages (`g_private_senders_file`). */
+    privateSendersFile?: string;
+    /** #10571: Gmail ingest tiers (`g_ingest_tiers`) on or off; omitted keeps the access mode's default. */
+    ingestTiers?: boolean;
   };
   /**
    * Register a meetings-kind source (meeting notes from a provider API). The

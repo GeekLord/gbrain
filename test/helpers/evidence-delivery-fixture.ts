@@ -116,10 +116,15 @@ function withoutCounts(meta: Record<string, unknown>): Record<string, unknown> {
   return rest;
 }
 
-/** Recall's additive `facts_order` (MEMORY_VERBS v1), which every response carries right after `total`; these captures are all newest-first. */
+/**
+ * Recall's `facts_order` (MEMORY_VERBS v1), which every response carries right after `total`. These captures pass only
+ * `query`, which ranks facts by that query since #10225, so they read `relevance`; this fixture is keyless, so the
+ * ranking is keyword-only and says so in `facts_degraded` right after it.
+ */
 function withFactsOrder(payload: Record<string, unknown>): Record<string, unknown> {
-  if ('facts_order' in payload || !('total' in payload)) return payload;
-  return Object.fromEntries(Object.entries(payload).flatMap(([k, v]) => k === 'total' ? [[k, v], ['facts_order', 'newest']] : [[k, v]]));
+  if (!('total' in payload)) return payload;
+  const ranked: Array<[string, unknown]> = [['facts_order', 'relevance'], ['facts_degraded', { reason: 'keyword_only_no_embedding_provider' }]];
+  return Object.fromEntries(Object.entries(payload).flatMap(([k, v]) => k === 'total' ? [[k, v], ...ranked] : k === 'facts_order' ? [] : [[k, v]]));
 }
 
 /** GST-687's remote quote of one row: its text (#8384: and title) fenced as an excerpt of its slug and `quoted` set (recall places it before `trust_tier`). */
@@ -136,17 +141,24 @@ function quotedRow(row: Record<string, unknown>, field: 'chunk_text' | 'chunk'):
  * The cost wave changes remote output on purpose: C1 projects remote
  * search/query rows to lean rows (and reports `rows: "lean"` in the retrieval
  * meta), and C2 serializes MCP content[0] as compact JSON. Recall's question
- * ranking adds `facts_order` to every recall response. GST-687 quotes text
+ * ranking adds `facts_order` to every recall response, and a query-only recall ranks
+ * its facts by the query (#10225). GST-687 quotes text
  * below the owner's trust tier for remote readers, and this fixture's pages
  * carry no trust declaration (`unknown`), so every remote row comes back
  * fenced and marked `quoted`. GBRA-200 appends the degraded stamp (a last
  * text block and `_meta.degraded`) to an MCP reply whose frozen meta names a
- * recall-affecting stage. The frozen pre-feature bytes stay as captured;
+ * recall-affecting stage. C3 (GST-3827) appends a `precedence` label to every
+ * local search and query row, and every page here sits in the default source
+ * with no rule or facts marking, so each reads `curated`. The frozen pre-feature bytes stay as captured;
  * this applies exactly those declared transforms to them, so every other byte
  * of the capture is still compared.
  */
 export function withCostWave(key: string, frozen: string): string {
   const base = key.replace(/:chunk$/, '');
+  if (['search', 'search-subagent', 'query', 'query-budget', 'query-low'].includes(base)) {
+    const v = JSON.parse(frozen) as { result: Record<string, unknown>[] };
+    return JSON.stringify({ ...v, result: v.result.map(r => ({ ...r, precedence: 'curated' })) });
+  }
   if (base === 'recall' || base === 'recall-budget') {
     const v = JSON.parse(frozen) as { result: Record<string, unknown>; meta: unknown };
     return JSON.stringify({ ...v, result: withFactsOrder(v.result) });

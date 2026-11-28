@@ -501,6 +501,15 @@
           {
             "category": "ops",
             "elapsed_ms": "<volatile>",
+            "message": "Not applicable: Rust engine shadow mode is off for this brain.",
+            "name": "rust_engine_addon",
+            "readiness_state": "not_applicable",
+            "severity": "info",
+            "status": "ok"
+          },
+          {
+            "category": "ops",
+            "elapsed_ms": "<volatile>",
             "message": "Connected, 20 pages",
             "name": "connection",
             "status": "ok"
@@ -529,7 +538,7 @@
                 "explicit_retention_days": null,
                 "over_target": false,
                 "target_bytes": 8589934592,
-                "used_bytes": 199663
+                "used_bytes": 201370
               },
               "inspected": 2,
               "outstanding": [],
@@ -539,7 +548,7 @@
               "verify": "gbrain doctor --only persistence_capacity --json"
             },
             "elapsed_ms": "<volatile>",
-            "message": "No cumulative write cap is set (the default), so receipt storage never refuses or pauses a write; it holds 199663 reserved bytes, and receipts not yet compacted are under the housekeeping target of 8589934592.",
+            "message": "No cumulative write cap is set (the default), so receipt storage never refuses or pauses a write; it holds 201370 reserved bytes, and receipts not yet compacted are under the housekeeping target of 8589934592.",
             "name": "persistence_capacity",
             "status": "ok"
           },
@@ -1126,9 +1135,9 @@
                   },
                   "worktree": {
                     "absent": 0,
-                    "clean": 18,
+                    "clean": 19,
                     "deleted": 0,
-                    "modified": 1,
+                    "modified": 0,
                     "untracked": 0
                   }
                 }
@@ -1387,6 +1396,25 @@
           {
             "category": "brain",
             "elapsed_ms": "<volatile>",
+            "message": "Not applicable: this brain serves one person, so no source has to be shared with members.",
+            "name": "access_shared_source_unread",
+            "readiness_state": "not_applicable",
+            "severity": "info",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "count": 0
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No live token or OAuth client is bound to a disabled or removed member.",
+            "name": "access_disabled_member_credentials",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
             "message": "Not applicable: no attest credential reads named sources as the person (--attest-read person).",
             "name": "attest_read_shared_scope",
             "readiness_state": "not_applicable",
@@ -1450,14 +1478,14 @@
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "1393 column(s) verified against live schema",
+            "message": "1417 column(s) verified against live schema",
             "name": "schema_columns",
             "status": "ok"
           },
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "All 192 table(s) the applied migrations create exist.",
+            "message": "All 198 table(s) the applied migrations create exist.",
             "name": "schema_missing_tables",
             "status": "ok"
           },
@@ -1466,6 +1494,13 @@
             "elapsed_ms": "<volatile>",
             "message": "Every function this gbrain's schema defines has its body",
             "name": "schema_function_bodies",
+            "status": "ok"
+          },
+          {
+            "category": "meta",
+            "elapsed_ms": "<volatile>",
+            "message": "Active pack: gbrain-base-v2 v1.7.0 (28 types, 17 link verbs)",
+            "name": "schema_pack_active",
             "status": "ok"
           },
           {
@@ -2792,7 +2827,7 @@
           {
             "category": "ops",
             "elapsed_ms": "<volatile>",
-            "message": "Subagent tier resolves to default (claude-sonnet-4-6) — full tool-loop capability",
+            "message": "Subagent tier resolves to default (claude-sonnet-5-5) — full tool-loop capability",
             "name": "subagent_capability",
             "status": "ok"
           },
@@ -3103,8 +3138,8 @@
                 }
               ],
               "stale_count": 1,
-              "synced_recently_count": 1,
-              "unchanged_count": 0,
+              "synced_recently_count": 0,
+              "unchanged_count": 1,
               "writer_owned_count": 1
             },
             "elapsed_ms": "<volatile>",
@@ -3390,12 +3425,6 @@
                 {
                   "age_ms": "<volatile>",
                   "checkout": "<home>/notes-src",
-                  "path": "fences/deterministic.md",
-                  "state": "modified"
-                },
-                {
-                  "age_ms": "<volatile>",
-                  "checkout": "<home>/notes-src",
                   "path": "fences/untracked.md",
                   "state": "untracked"
                 },
@@ -3424,7 +3453,7 @@
                   "state": "untracked"
                 }
               ],
-              "dirty_count": 6,
+              "dirty_count": 5,
               "dirty_warn_after_minutes": 30,
               "foreign": [],
               "partial": false,
@@ -3458,8 +3487,44 @@
           {
             "category": "brain",
             "elapsed_ms": "<volatile>",
+            "message": "The nightly cycle has not recorded anything it learned yet.",
+            "name": "learning_note",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "delivered_sessions": 0,
+              "last_session": null,
+              "max_sessions": 3,
+              "reason": "not_new_install",
+              "state": "off",
+              "window_ends_at": null
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "The first-session suggestion is off: this brain was not created by a gbrain setup run (an upgrade, a restored or imported brain, or an older install), so there is no first session to suggest for. Details: gbrain onboarding status.",
+            "name": "first_session_suggestion",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
             "message": "No memory proposals await the owner.",
             "name": "memory_proposals_pending",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
+            "message": "No agent policy is set; policy_check answers none (gbrain policy init sets one).",
+            "name": "policy_valid",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
+            "message": "No confirmed standing rules to check (gbrain correct saves one).",
+            "name": "rules_regression",
             "status": "ok"
           },
           {
@@ -3993,6 +4058,36 @@
           {
             "category": "brain",
             "details": {
+              "items": [],
+              "total": 0
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "Every held write is tied to one page, or waits for its page to be created.",
+            "name": "write_gate_hold_ambiguous",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "by_source": {},
+              "complete": true,
+              "items": [],
+              "items_truncated": false,
+              "row_budget": 5000,
+              "scanned": 0,
+              "stranded": {
+                "no_page": 0,
+                "page_deleted": 0
+              }
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No held write is without a live page (0 held write(s) read).",
+            "name": "write_gate_holds_stranded",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
               "bad_config": [],
               "chars_limit": 4000,
               "chars_used": 0,
@@ -4205,6 +4300,19 @@
             "elapsed_ms": "<volatile>",
             "message": "No rename that lost its page identity is waiting for a disposition.",
             "name": "rename_identity_downgrades",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "by_source": [],
+              "count": 0,
+              "docs": "docs/guides/repair.md#slug-spelling",
+              "truncated": false
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No page is stored under an older spelling of its name.",
+            "name": "legacy_slug_spellings",
             "status": "ok"
           },
           {
@@ -4473,6 +4581,17 @@
           {
             "category": "brain",
             "details": {
+              "classes": [],
+              "links": 0
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No person pages linked or collapsed automatically in the last 24 hours.",
+            "name": "dedupe_auto_links",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
               "docs": "docs/guides/write-refusals.md#file_database_drift",
               "sources": []
             },
@@ -4682,18 +4801,18 @@
                 },
                 {
                   "by_tier": {
-                    "deterministic": 2,
+                    "deterministic": 3,
                     "llm": 1,
                     "manual": 1,
                     "resolver": 0,
-                    "total": 4
+                    "total": 5
                   },
                   "files": {
-                    "deterministic": 1,
+                    "deterministic": 2,
                     "llm": 0,
                     "manual": 0,
                     "resolver": 0,
-                    "total": 1
+                    "total": 2
                   },
                   "holds": {
                     "deterministic": 0,
@@ -4711,6 +4830,15 @@
                     "total": 1
                   },
                   "sample": [
+                    {
+                      "bucket": "file",
+                      "key": "fences/deterministic",
+                      "path": "fences/deterministic.md",
+                      "reasons": [
+                        "close_fence"
+                      ],
+                      "tier": "deterministic"
+                    },
                     {
                       "bucket": "hold",
                       "key": "fences/llm",
@@ -4756,7 +4884,7 @@
                     "walking": false
                   },
                   "source_id": "notes",
-                  "total": 4
+                  "total": 5
                 },
                 {
                   "by_tier": {
@@ -4811,7 +4939,7 @@
                 }
               ],
               "timeout_ms": "<volatile>",
-              "total": 5,
+              "total": 6,
               "trend": [
                 {
                   "by_day": [],
@@ -4913,7 +5041,7 @@
               },
               "why": "Previews the repair of each malformed fence of notes (read-only, no model call): its planned tier and diff, the estimated model cost, or the exact edit for a fence gbrain will not guess; it prints the apply command with --expect <hash>. They are not repaired automatically (no maintenance run has completed in the last 24 h), so apply the plan with the command the preview prints. 1 need a manual edit: make the edit the preview names in the file (or the page), commit, then sync."
             },
-            "message": "5 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 1 unsynced file(s) (by tier: deterministic 2, llm 1, manual 1); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 1 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
+            "message": "6 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 2 unsynced file(s) (by tier: deterministic 3, llm 1, manual 1); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 1 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
             "name": "fence_integrity",
             "status": "warn"
           },
@@ -5082,7 +5210,7 @@
             "category": "meta",
             "details": {
               "counts": {
-                "global": 18,
+                "global": 19,
                 "mixed": 2,
                 "source": 12
               },
@@ -5105,6 +5233,7 @@
                 "facts_drain": "global",
                 "fence_repair": "global",
                 "grade_takes": "global",
+                "learning_derive": "global",
                 "lint": "source",
                 "orphans": "global",
                 "patterns": "mixed",
@@ -5122,7 +5251,7 @@
               }
             },
             "elapsed_ms": "<volatile>",
-            "message": "Phase taxonomy: 12 source-scoped, 18 brain-global, 2 mixed. Source-safe: [lint, backlinks, sync, extract, extract_facts, extract_atoms, recompute_emotional_weight, consolidate, propose_takes, conversation_facts_backfill, enrich_thin, schema-suggest]. Brain-global: [fence_repair, content_repair, unindexed_files, resolve_symbol_edges, synthesize_concepts, grade_takes, calibration_profile, edge_contradictions, claim_conflicts, drift, standing_questions, chronicle, facts_drain, skillopt, embed, orphans, purge, bookkeeping_gc]. Mixed: [synthesize, patterns].",
+            "message": "Phase taxonomy: 12 source-scoped, 19 brain-global, 2 mixed. Source-safe: [lint, backlinks, sync, extract, extract_facts, extract_atoms, recompute_emotional_weight, consolidate, propose_takes, conversation_facts_backfill, enrich_thin, schema-suggest]. Brain-global: [fence_repair, content_repair, unindexed_files, resolve_symbol_edges, synthesize_concepts, grade_takes, calibration_profile, edge_contradictions, claim_conflicts, drift, standing_questions, chronicle, facts_drain, skillopt, embed, orphans, learning_derive, purge, bookkeeping_gc]. Mixed: [synthesize, patterns].",
             "name": "cycle_phase_scope",
             "status": "ok"
           },
@@ -5233,14 +5362,14 @@
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "Active pack gbrain-base-v2@1.7.0+e142684a is current (no successor declared)",
+            "message": "Active pack gbrain-base-v2@1.7.0+f1691ae3 is current (no successor declared)",
             "name": "pack_upgrade_available",
             "status": "ok"
           },
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "5 distinct typed values (pack gbrain-base-v2 declares 25)",
+            "message": "5 distinct typed values (pack gbrain-base-v2 declares 28)",
             "name": "type_proliferation",
             "status": "ok"
           },
@@ -5388,7 +5517,7 @@
               },
               "why": "Previews the repair of each malformed fence of notes (read-only, no model call): its planned tier and diff, the estimated model cost, or the exact edit for a fence gbrain will not guess; it prints the apply command with --expect <hash>. They are not repaired automatically (no maintenance run has completed in the last 24 h), so apply the plan with the command the preview prints. 1 need a manual edit: make the edit the preview names in the file (or the page), commit, then sync."
             },
-            "fix": "5 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 1 unsynced file(s) (by tier: deterministic 2, llm 1, manual 1); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 1 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
+            "fix": "6 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 2 unsynced file(s) (by tier: deterministic 3, llm 1, manual 1); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 1 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
             "name": "fence_integrity",
             "status": "warn",
             "tier": "symptom"
@@ -6066,6 +6195,15 @@
           {
             "category": "ops",
             "elapsed_ms": "<volatile>",
+            "message": "Not applicable: Rust engine shadow mode is off for this brain.",
+            "name": "rust_engine_addon",
+            "readiness_state": "not_applicable",
+            "severity": "info",
+            "status": "ok"
+          },
+          {
+            "category": "ops",
+            "elapsed_ms": "<volatile>",
             "message": "Connected, 20 pages",
             "name": "connection",
             "status": "ok"
@@ -6094,7 +6232,7 @@
                 "explicit_retention_days": null,
                 "over_target": false,
                 "target_bytes": 8589934592,
-                "used_bytes": 199663
+                "used_bytes": 201370
               },
               "inspected": 2,
               "outstanding": [],
@@ -6104,7 +6242,7 @@
               "verify": "gbrain doctor --only persistence_capacity --json"
             },
             "elapsed_ms": "<volatile>",
-            "message": "No cumulative write cap is set (the default), so receipt storage never refuses or pauses a write; it holds 199663 reserved bytes, and receipts not yet compacted are under the housekeeping target of 8589934592.",
+            "message": "No cumulative write cap is set (the default), so receipt storage never refuses or pauses a write; it holds 201370 reserved bytes, and receipts not yet compacted are under the housekeeping target of 8589934592.",
             "name": "persistence_capacity",
             "status": "ok"
           },
@@ -6691,9 +6829,9 @@
                   },
                   "worktree": {
                     "absent": 0,
-                    "clean": 18,
+                    "clean": 19,
                     "deleted": 0,
-                    "modified": 1,
+                    "modified": 0,
                     "untracked": 0
                   }
                 }
@@ -6952,6 +7090,25 @@
           {
             "category": "brain",
             "elapsed_ms": "<volatile>",
+            "message": "Not applicable: this brain serves one person, so no source has to be shared with members.",
+            "name": "access_shared_source_unread",
+            "readiness_state": "not_applicable",
+            "severity": "info",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "count": 0
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No live token or OAuth client is bound to a disabled or removed member.",
+            "name": "access_disabled_member_credentials",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
             "message": "Not applicable: no attest credential reads named sources as the person (--attest-read person).",
             "name": "attest_read_shared_scope",
             "readiness_state": "not_applicable",
@@ -7015,14 +7172,14 @@
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "1393 column(s) verified against live schema",
+            "message": "1417 column(s) verified against live schema",
             "name": "schema_columns",
             "status": "ok"
           },
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "All 192 table(s) the applied migrations create exist.",
+            "message": "All 198 table(s) the applied migrations create exist.",
             "name": "schema_missing_tables",
             "status": "ok"
           },
@@ -7031,6 +7188,13 @@
             "elapsed_ms": "<volatile>",
             "message": "Every function this gbrain's schema defines has its body",
             "name": "schema_function_bodies",
+            "status": "ok"
+          },
+          {
+            "category": "meta",
+            "elapsed_ms": "<volatile>",
+            "message": "Active pack: gbrain-base-v2 v1.7.0 (28 types, 17 link verbs)",
+            "name": "schema_pack_active",
             "status": "ok"
           },
           {
@@ -8357,7 +8521,7 @@
           {
             "category": "ops",
             "elapsed_ms": "<volatile>",
-            "message": "Subagent tier resolves to default (claude-sonnet-4-6) — full tool-loop capability",
+            "message": "Subagent tier resolves to default (claude-sonnet-5-5) — full tool-loop capability",
             "name": "subagent_capability",
             "status": "ok"
           },
@@ -8668,8 +8832,8 @@
                 }
               ],
               "stale_count": 1,
-              "synced_recently_count": 1,
-              "unchanged_count": 0,
+              "synced_recently_count": 0,
+              "unchanged_count": 1,
               "writer_owned_count": 1
             },
             "elapsed_ms": "<volatile>",
@@ -8955,12 +9119,6 @@
                 {
                   "age_ms": "<volatile>",
                   "checkout": "<home>/notes-src",
-                  "path": "fences/deterministic.md",
-                  "state": "modified"
-                },
-                {
-                  "age_ms": "<volatile>",
-                  "checkout": "<home>/notes-src",
                   "path": "fences/late.md",
                   "state": "untracked"
                 },
@@ -9001,7 +9159,7 @@
                   "state": "untracked"
                 }
               ],
-              "dirty_count": 8,
+              "dirty_count": 7,
               "dirty_warn_after_minutes": 30,
               "foreign": [],
               "partial": false,
@@ -9035,8 +9193,44 @@
           {
             "category": "brain",
             "elapsed_ms": "<volatile>",
+            "message": "The nightly cycle has not recorded anything it learned yet.",
+            "name": "learning_note",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "delivered_sessions": 0,
+              "last_session": null,
+              "max_sessions": 3,
+              "reason": "not_new_install",
+              "state": "off",
+              "window_ends_at": null
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "The first-session suggestion is off: this brain was not created by a gbrain setup run (an upgrade, a restored or imported brain, or an older install), so there is no first session to suggest for. Details: gbrain onboarding status.",
+            "name": "first_session_suggestion",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
             "message": "No memory proposals await the owner.",
             "name": "memory_proposals_pending",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
+            "message": "No agent policy is set; policy_check answers none (gbrain policy init sets one).",
+            "name": "policy_valid",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "elapsed_ms": "<volatile>",
+            "message": "No confirmed standing rules to check (gbrain correct saves one).",
+            "name": "rules_regression",
             "status": "ok"
           },
           {
@@ -9570,6 +9764,36 @@
           {
             "category": "brain",
             "details": {
+              "items": [],
+              "total": 0
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "Every held write is tied to one page, or waits for its page to be created.",
+            "name": "write_gate_hold_ambiguous",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "by_source": {},
+              "complete": true,
+              "items": [],
+              "items_truncated": false,
+              "row_budget": 5000,
+              "scanned": 0,
+              "stranded": {
+                "no_page": 0,
+                "page_deleted": 0
+              }
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No held write is without a live page (0 held write(s) read).",
+            "name": "write_gate_holds_stranded",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
               "bad_config": [],
               "chars_limit": 4000,
               "chars_used": 0,
@@ -9782,6 +10006,19 @@
             "elapsed_ms": "<volatile>",
             "message": "No rename that lost its page identity is waiting for a disposition.",
             "name": "rename_identity_downgrades",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
+              "by_source": [],
+              "count": 0,
+              "docs": "docs/guides/repair.md#slug-spelling",
+              "truncated": false
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No page is stored under an older spelling of its name.",
+            "name": "legacy_slug_spellings",
             "status": "ok"
           },
           {
@@ -10050,6 +10287,17 @@
           {
             "category": "brain",
             "details": {
+              "classes": [],
+              "links": 0
+            },
+            "elapsed_ms": "<volatile>",
+            "message": "No person pages linked or collapsed automatically in the last 24 hours.",
+            "name": "dedupe_auto_links",
+            "status": "ok"
+          },
+          {
+            "category": "brain",
+            "details": {
               "docs": "docs/guides/write-refusals.md#file_database_drift",
               "sources": []
             },
@@ -10259,18 +10507,18 @@
                 },
                 {
                   "by_tier": {
-                    "deterministic": 1,
+                    "deterministic": 2,
                     "llm": 1,
                     "manual": 2,
                     "resolver": 0,
-                    "total": 4
+                    "total": 5
                   },
                   "files": {
-                    "deterministic": 0,
+                    "deterministic": 1,
                     "llm": 0,
                     "manual": 1,
                     "resolver": 0,
-                    "total": 1
+                    "total": 2
                   },
                   "holds": {
                     "deterministic": 0,
@@ -10288,6 +10536,15 @@
                     "total": 1
                   },
                   "sample": [
+                    {
+                      "bucket": "file",
+                      "key": "fences/deterministic",
+                      "path": "fences/deterministic.md",
+                      "reasons": [
+                        "close_fence"
+                      ],
+                      "tier": "deterministic"
+                    },
                     {
                       "bucket": "file",
                       "key": "fences/late",
@@ -10333,7 +10590,7 @@
                     "walking": false
                   },
                   "source_id": "notes",
-                  "total": 4
+                  "total": 5
                 },
                 {
                   "by_tier": {
@@ -10388,7 +10645,7 @@
                 }
               ],
               "timeout_ms": "<volatile>",
-              "total": 5,
+              "total": 6,
               "trend": [
                 {
                   "by_day": [],
@@ -10490,7 +10747,7 @@
               },
               "why": "Previews the repair of each malformed fence of notes (read-only, no model call): its planned tier and diff, the estimated model cost, or the exact edit for a fence gbrain will not guess; it prints the apply command with --expect <hash>. They are not repaired automatically (no maintenance run has completed in the last 24 h), so apply the plan with the command the preview prints. 2 need a manual edit: make the edit the preview names in the file (or the page), commit, then sync."
             },
-            "message": "5 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 1 unsynced file(s) (by tier: deterministic 1, llm 1, manual 2); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 2 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
+            "message": "6 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 2 unsynced file(s) (by tier: deterministic 2, llm 1, manual 2); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 2 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
             "name": "fence_integrity",
             "status": "warn"
           },
@@ -10659,7 +10916,7 @@
             "category": "meta",
             "details": {
               "counts": {
-                "global": 18,
+                "global": 19,
                 "mixed": 2,
                 "source": 12
               },
@@ -10682,6 +10939,7 @@
                 "facts_drain": "global",
                 "fence_repair": "global",
                 "grade_takes": "global",
+                "learning_derive": "global",
                 "lint": "source",
                 "orphans": "global",
                 "patterns": "mixed",
@@ -10699,7 +10957,7 @@
               }
             },
             "elapsed_ms": "<volatile>",
-            "message": "Phase taxonomy: 12 source-scoped, 18 brain-global, 2 mixed. Source-safe: [lint, backlinks, sync, extract, extract_facts, extract_atoms, recompute_emotional_weight, consolidate, propose_takes, conversation_facts_backfill, enrich_thin, schema-suggest]. Brain-global: [fence_repair, content_repair, unindexed_files, resolve_symbol_edges, synthesize_concepts, grade_takes, calibration_profile, edge_contradictions, claim_conflicts, drift, standing_questions, chronicle, facts_drain, skillopt, embed, orphans, purge, bookkeeping_gc]. Mixed: [synthesize, patterns].",
+            "message": "Phase taxonomy: 12 source-scoped, 19 brain-global, 2 mixed. Source-safe: [lint, backlinks, sync, extract, extract_facts, extract_atoms, recompute_emotional_weight, consolidate, propose_takes, conversation_facts_backfill, enrich_thin, schema-suggest]. Brain-global: [fence_repair, content_repair, unindexed_files, resolve_symbol_edges, synthesize_concepts, grade_takes, calibration_profile, edge_contradictions, claim_conflicts, drift, standing_questions, chronicle, facts_drain, skillopt, embed, orphans, learning_derive, purge, bookkeeping_gc]. Mixed: [synthesize, patterns].",
             "name": "cycle_phase_scope",
             "status": "ok"
           },
@@ -10810,14 +11068,14 @@
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "Active pack gbrain-base-v2@1.7.0+e142684a is current (no successor declared)",
+            "message": "Active pack gbrain-base-v2@1.7.0+f1691ae3 is current (no successor declared)",
             "name": "pack_upgrade_available",
             "status": "ok"
           },
           {
             "category": "meta",
             "elapsed_ms": "<volatile>",
-            "message": "5 distinct typed values (pack gbrain-base-v2 declares 25)",
+            "message": "5 distinct typed values (pack gbrain-base-v2 declares 28)",
             "name": "type_proliferation",
             "status": "ok"
           },
@@ -10965,7 +11223,7 @@
               },
               "why": "Previews the repair of each malformed fence of notes (read-only, no model call): its planned tier and diff, the estimated model cost, or the exact edit for a fence gbrain will not guess; it prints the apply command with --expect <hash>. They are not repaired automatically (no maintenance run has completed in the last 24 h), so apply the plan with the command the preview prints. 2 need a manual edit: make the edit the preview names in the file (or the page), commit, then sync."
             },
-            "fix": "5 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 1 unsynced file(s) (by tier: deterministic 1, llm 1, manual 2); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 2 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
+            "fix": "6 malformed facts or takes fence(s) wait: notes: 2 held file(s), 1 stored page(s), 2 unsynced file(s) (by tier: deterministic 2, llm 1, manual 2); oldest hold 0 h old; plain: 1 unsynced file(s) (by tier: deterministic 1). The deterministic, resolver and model-tier ones are not repaired automatically (no maintenance run has completed in the last 24 h); 2 need the manual edit the preview names. None of them blocks a sync. Preview: gbrain repair fences --source notes; gbrain repair fences --source plain. Model repair caps: $0.30 per page, $1.00 per day ($0.00 spent today).",
             "name": "fence_integrity",
             "status": "warn",
             "tier": "symptom"

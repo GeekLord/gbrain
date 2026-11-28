@@ -6,6 +6,14 @@
  * owns their contents.
  */
 import type { ChunkInput, PageType, PageKind, EffectiveDateSource } from '../types.ts';
+/**
+ * Segmented page storage (Wave B): the row shapes shared by the engine
+ * methods (engine-sql/page-body.ts), the pure segmenter (page-body/segmenter.ts)
+ * and the ingest/publication path. Parser state, protected regions, facts
+ * slots, outline and page flags are opaque JSON to the engine: the segmenter
+ * owns their contents.
+ */
+import type { CRMode } from '../types.ts';
 
 export type BodyStorage = 'inline' | 'segmented';
 export type BodyRegion = 'truth' | 'timeline';
@@ -14,6 +22,20 @@ export type BodyStagingKind = 'upload' | 'import' | 'sync' | 'put' | 'append' | 
 export type BodyStagingMode = 'create' | 'replace' | 'append';
 export type BodyStagingState = 'open' | 'sealed' | 'prepared' | 'committed' | 'aborted' | 'expired';
 export type JsonObject = Record<string, unknown>;
+
+/** The page fields a segmented embed reads (`readSegmentedEmbedPage`): metadata only, never the body. */
+export interface SegmentedEmbedPage {
+  id: number;
+  slug: string;
+  source_id: string;
+  title: string;
+  contextual_retrieval_mode: CRMode | null;
+  body_storage: 'segmented';
+  body_bytes: number;
+}
+
+/** A page by id, or by source and slug (`readSegmentedEmbedPage`). */
+export type SegmentedEmbedRef = { id: number } | { sourceId: string; slug: string };
 
 /** One segment's stored text, deduplicated per (source, sha256). */
 export interface SegmentTextInput {
@@ -87,6 +109,8 @@ export interface SegmentedPageMeta {
   source_uri?: string | null;
   ingested_via?: string | null;
   chunker_version?: number | null;
+  /** GST-4056: this write's own channel, stored with the flipped body's hash (PageInput.content_author). */
+  content_author?: string | null;
 }
 
 /** The body columns of a segmented page after a flip. */
@@ -120,6 +144,12 @@ export interface BodyFlipInput {
   retireMaxRows: number;
   body: SegmentedBodyColumns;
   meta: SegmentedPageMeta;
+  /**
+   * GST-4056: no manifest row changed or closed, so the staged body text is the live one, whatever chunk projection the
+   * write rebuilds. A flip that also keeps the type, title and text
+   * frontmatter changes no text, so it keeps the page's verified content author, or none, instead of `meta.content_author`.
+   */
+  textUnchanged?: boolean;
 }
 
 export interface BodyFlipResult {

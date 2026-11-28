@@ -44,7 +44,7 @@ export interface WriteAuthority {
    * lift the privacy part of the writer's read policy only while storedOwnerWrite still holds; member access always applies.
    */
   ownerWrite?: string;
-  databaseOnlyReason?: 'subagent_sandbox' | 'disabled_by_config' | 'no_repo_configured' | 'relative_root' | 'connector_database' | 'unbound_source' | 'overwrite_restore' | 'detached' | 'entity_page_missing';
+  databaseOnlyReason?: 'subagent_sandbox' | 'disabled_by_config' | 'no_repo_configured' | 'relative_root' | 'connector_database' | 'unbound_source' | 'overwrite_restore' | 'detached' | 'entity_page_missing' | 'foreign_checkout';
   autoLinkTrusted?: boolean;
   restrictedNamespace?: boolean;
   sourceId: string;
@@ -208,7 +208,13 @@ export const DEFAULT_JOURNAL_LIMITS: Readonly<JournalLimits> = Object.freeze({
   principalTerminalBytes: Infinity, brainTerminalBytes: Infinity,
   brainRecoveryBytes: 1024 ** 3, worktreeRecoveryBytes: 256 * 1024 ** 2,
 });
-export type SqlEngine = Pick<BrainEngine, 'executeRaw'>;
+/**
+ * The engine view persistence statements run over: its executeRaw, plus the two typed access reads a write's caller
+ * record needs (access/caller.ts memberIdentityFor and folderAccessFor), which a Rust brain serves without raw SQL.
+ */
+export type SqlEngine = Pick<BrainEngine, 'executeRaw' | 'readLiveMember' | 'readFolderAccess'>;
+/** A bare statement runner, for the helpers that only run their own SQL and are handed executeRaw-only views. */
+export type RawSqlEngine = Pick<BrainEngine, 'executeRaw'>;
 export function principalKey(p: Principal): string { return `principal:${p.kind}:${p.id}`; }
 export function requestPrincipal(r: WriteRequest): Principal { return { kind: r.principal_kind, id: r.principal_id }; }
 export function isTerminal(r: Pick<WriteRequest, 'state'>): boolean { return TERMINAL_STATES.has(r.state); }

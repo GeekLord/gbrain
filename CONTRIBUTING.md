@@ -228,10 +228,12 @@ bash scripts/check-test-discriminates.sh <test-file> <source-file> [<source-file
 
 It reverts the source files to the pre-fix state (plain file copies, no git
 stash), runs the test file, requires at least one EXECUTED test to fail —
-exit ≠ 0 alone does not count, because a missing file or import crash also
-exits non-zero (exit 3, the vacuous-failure class) — restores, and prints the
-paste-ready field line. Exit 1 means the test passed with the fix reverted:
-tighten the assertions before asking for review.
+it counts Bun's individual `(fail) <name>` lines, not its failure summary —
+then restores the files. Exit 0 prints the paste-ready field line. Exit 1
+means the test passed with the fix reverted: tighten the assertions before
+asking for review. Exit 3 means Bun exited nonzero without a failed test
+(a vacuous failure). If Bun reports an unhandled error, check whether reverting
+the fix removed a module the test imports. Exit 2 means a usage or setup error.
 
 Vacuous-assertion shapes to avoid (they recur):
 - asserting only `exit ≠ 0` (a missing binary also exits non-zero);
@@ -780,7 +782,10 @@ gstack reads both from master, so a branch's edits take effect after it merges.
   `scripts/pregate-remote-gate.sh`: on a machine under 8 cores pregate records
   the selected test files as a requires-remote obligation instead of running
   them locally (a hub file such as `src/core/config.ts` selects nearly the
-  whole suite). `UBI_OWNER=<thread code> gstack-pregate --stage tests --remote
+  whole suite). `serial_patterns` (`**/*.serial.test.*` and
+  `test/e2e/**/*.test.ts`) makes the local test lane run each matching file in
+  its own `bun test` process, since E2E files share one test database and
+  process-wide state. `UBI_OWNER=<thread code> gstack-pregate --stage tests --remote
   --spend-cap <usd> --allow-repo-commands` then runs the full Ubicloud gate on
   the working tree and clears the obligation from its
   `PREGATE_REMOTE: tree=… tests=… failed=…` line. On a clean tree whose Test and

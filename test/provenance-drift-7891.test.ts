@@ -139,6 +139,55 @@ for (const kind of testBackends()) {
         expect(await proposals(slug)).toEqual([]);
       }, 120_000);
 
+      // Value: protects=#10190 a needs_review page (a later local edit changed the stamp again, no repair target) is named and never offered the repair that reports affected 0; it holds the check at warn only while its lowering marker is lost to a remote write or missing; fails_when=a stamps-only needs_review page warns, a needs_review page is offered repair provenance or counted as repairable, or a marker-lost or marker-missing one reads ok; why_new=no row covered needs_review in doctor; seam=none; no_claim=how to decide those pages (manual)
+      test('needs_review pages are named, never offered the repair, and warn only while a needed marker is lost or missing (#10190)', async () => {
+        const stamps = 'inbox/later-local-stamp';
+        await seed(stamps, STORED);
+        await rewrite(stamps, { ...STORED, ingested_at: '2026-03-01T00:00:00.000Z' }, 'oauth_client');
+        await rewrite(stamps, { ...STORED, ingested_at: '2026-04-01T00:00:00.000Z' }, 'local_cli');
+        const named = await doctor();
+        expect(named.details.sources[0]).toMatchObject({ needs_review: 1 });
+        expect((await run(false)).affected).toBe(0);
+        expect(named.status).toBe('ok');
+        expect(named.fix).toBeUndefined();
+        expect(named.message).toContain(`1 page(s) need manual review`);
+        expect(named.message).toContain(`default:${stamps}`);
+
+        const marker = 'inbox/later-local-marker';
+        await seed(marker, STORED);
+        await rewrite(marker, {}, 'oauth_client');
+        await rewrite(marker, { ingested_via: 'manual' }, 'local_cli');
+        const exposed = await doctor();
+        expect(exposed.details.sources[0]).toMatchObject({ needs_review: 2 });
+        expect((await run(false)).affected).toBe(0);
+        expect(exposed.status).toBe('warn');
+        expect(exposed.fix).toBeUndefined();
+        expect(exposed.message).toContain('2 page(s) need manual review');
+        expect(exposed.message).toContain('1 of them lack the lowering trust marker');
+
+        const unmarked = 'inbox/later-local-unmarked';
+        await seed(unmarked, { ingested_at: STORED.ingested_at }, 'agent_written');
+        await rewrite(unmarked, { ingested_at: '2026-03-01T00:00:00.000Z' }, 'oauth_client');
+        await rewrite(unmarked, { ingested_at: '2026-04-01T00:00:00.000Z' }, 'local_cli');
+        await fixtureWrite(null, async tx => { await withTrustPromotion(tx, 'user_confirmed', () =>
+          tx.executeRaw(`UPDATE pages SET trust_tier = 'agent_written' WHERE source_id = 'default' AND slug = $1`, [unmarked])); });
+        const missing = await doctor();
+        expect(missing.details.sources[0]).toMatchObject({ needs_review: 3, marker_missing: 1 });
+        expect(missing.status).toBe('warn');
+        expect(missing.fix).toBeUndefined();
+        expect(missing.message).toContain('2 of them lack the lowering trust marker');
+
+        const remote = 'inbox/remote-drop-beside';
+        await seed(remote, STORED);
+        await rewrite(remote, {}, 'oauth_client');
+        const mixed = await doctor();
+        expect(mixed.status).toBe('warn');
+        expect(mixed.message).toContain('3 page(s) need manual review');
+        expect(mixed.message).toMatch(/^1 page\(s\)/);
+        expect(mixed.fix.argv).toEqual(['gbrain', 'repair', 'provenance', '--source', 'default', '--json']);
+        expect(mixed.fix.user_message).toContain(`1 page(s) (for example ${remote})`);
+      }, 120_000);
+
       test('apply restores the stamps and the marker, lowers the page, files a lower_page proposal; a rerun previews nothing', async () => {
         const slug = 'inbox/remote-restore';
         await seed(slug, STORED);
@@ -195,6 +244,31 @@ for (const kind of testBackends()) {
         await run(true, { expect: wide.preview_hash, includeAmbiguous: true });
         expect(stampsOf((await page(slug)).page.frontmatter)).toEqual(STORED);
         expect(await tierOf(slug)).toBe('external_untrusted');
+      }, 120_000);
+
+      test('#10025: a restore never removes an ingested_at that only a write with no recorded writer added', async () => {
+        const slug = 'diary/added-ingested-at';
+        const added = '2026-05-30T15:34:11.457Z';
+        const nullColumn = (tx: BrainEngine) => tx.executeRaw('UPDATE pages SET ingested_at = NULL WHERE source_id = $1 AND slug = $2', ['default', slug]);
+        await fixtureWrite(null, async tx => {
+          await tx.putPage(slug, { type: 'note', title: 'Seeded', compiled_truth: 'Captured body', timeline: '',
+            frontmatter: { source_kind: 'webhook', ingested_via: 'webhook' }, source_kind: 'webhook', ingested_via: 'webhook' } as never);
+          await nullColumn(tx);
+        });
+        await writeFile(slug);
+        await fixtureWrite(null, async tx => {
+          await tx.createVersion(slug, { sourceId: 'default' });
+          await tx.putPage(slug, { type: 'note', title: 'Seeded', compiled_truth: 'Captured body, edited', timeline: '', frontmatter: { ingested_at: added } } as never);
+          await nullColumn(tx);
+        });
+        await writeFile(slug);
+        const wide = await run(false, { includeAmbiguous: true });
+        expect(wide.affected).toBe(1);
+        expect(wide.listing[0].detail).not.toContain('ingested_at');
+        await run(true, { expect: wide.preview_hash, includeAmbiguous: true });
+        expect(stampsOf((await page(slug)).page.frontmatter)).toEqual({ source_kind: 'webhook', ingested_via: 'webhook', ingested_at: added });
+        if (repo) expect(parseMarkdown(fs.readFileSync(fileOf(slug), 'utf8'), slug).frontmatter.ingested_at).toBe(added);
+        expect((await run(false, { includeAmbiguous: true })).affected).toBe(0);
       }, 120_000);
 
       test.skipIf(!repo)('a page file holding an edit the database lacks is listed needs_review and never overwritten', async () => {
@@ -381,6 +455,44 @@ for (const kind of testBackends()) {
       expect((await repair(engine, false)).affected).toBe(0);
     }, { databaseUrl }), 120_000);
 
+    test('#10025: a put keeps a stored ingested_at the trusted column lacks in the row and the file, and leaves the column empty', () => managedBrain(async ({ engine, ctx, root }) => {
+      const slug = 'diary/kept-ingested-at';
+      const original = '2026-05-30T15:34:11.457Z';
+      await operationsByName.put_page.handler(ctx, { slug, content: '---\ntitle: Diary\ntype: note\n---\nBody\n' });
+      await settleManagedGitEffects(engine);
+      // A page whose stamp predates the server-written column: the frontmatter holds it, the column is empty.
+      await withManagedFixtureWrite(engine, ['default'], tx => tx.executeRaw(`UPDATE pages SET frontmatter = frontmatter || jsonb_build_object('ingested_at', $2::text),
+        ingested_at = NULL WHERE source_id = 'default' AND slug = $1`, [slug, original]));
+      const seeded = (await engine.readPageSnapshot(slug, { sourceId: 'default' }))!;
+      fs.writeFileSync(path.join(root, `${slug}.md`), serializePageToMarkdown(seeded.page, seeded.tags));
+      await operationsByName.put_page.handler(ctx, { slug, content: '---\ntitle: Diary\ntype: note\n---\nBody, edited\n', expected_revision: seeded.revision });
+      await settleManagedGitEffects(engine);
+      const after = (await engine.readPageSnapshot(slug, { sourceId: 'default' }))!;
+      expect(after.page.compiled_truth).toContain('Body, edited');
+      expect(after.page.frontmatter.ingested_at).toBe(original);
+      const [{ ingested_at }] = await engine.executeRaw<{ ingested_at: string | Date }>("SELECT ingested_at FROM pages WHERE source_id = 'default' AND slug = $1", [slug]);
+      expect(ingested_at).toBeNull();
+      expect(parseMarkdown(fs.readFileSync(path.join(root, `${slug}.md`), 'utf8'), slug).frontmatter.ingested_at).toBe(original);
+    }, { databaseUrl }), 120_000);
+
+    // Value: protects=GST-4037 a managed put with explicit provenance stamps the first write's channel, so the first-ingest columns stay as stored; fails_when=the import's own time or source_uri reaches the columns beside the first write's channel; why_new=no managed row passes explicit provenance; seam=none; no_claim=remote puts (provenance-stamps-7873)
+    test('GST-4037: a managed put with explicit provenance keeps the first-ingest columns as stored', () => managedBrain(async ({ engine, ctx }) => {
+      const slug = 'inbox/managed-reingest';
+      await operationsByName.put_page.handler(ctx, { slug, content: '---\ntitle: Seeded\ntype: note\n---\nCaptured body\n' });
+      await settleManagedGitEffects(engine);
+      await withManagedFixtureWrite(engine, ['default'], tx => tx.executeRaw(`UPDATE pages SET source_kind = 'webhook', source_uri = 'https://example.invalid/first',
+        ingested_via = 'webhook', ingested_at = '2026-01-02T03:04:05.123456Z'::timestamptz WHERE source_id = 'default' AND slug = $1`, [slug]));
+      const columns = () => engine.executeRaw(`SELECT source_kind, source_uri, ingested_via, to_char(ingested_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS micros
+        FROM pages WHERE source_id = 'default' AND slug = $1`, [slug]);
+      const before = await columns();
+      const seeded = (await engine.readPageSnapshot(slug, { sourceId: 'default' }))!;
+      await operationsByName.put_page.handler(ctx, { slug, content: '---\ntitle: Seeded\ntype: note\n---\nCaptured body, rewritten\n', expected_revision: seeded.revision,
+        source_kind: 'capture-cli', source_uri: 'https://example.invalid/second', ingested_via: 'capture-cli' });
+      await settleManagedGitEffects(engine);
+      expect((await engine.readPageSnapshot(slug, { sourceId: 'default' }))!.page.compiled_truth).toContain('rewritten');
+      expect(await columns()).toEqual(before);
+    }, { databaseUrl }), 120_000);
+
     test('#8009: a page sync holds as file_drift is listed held with its code, never planned; the apply writes exactly the previewed count', () => managedBrain(async brain => {
       const { engine, root } = brain;
       const [clear, held] = ['inbox/managed-clear', 'inbox/managed-held'];
@@ -444,6 +556,10 @@ describe('#7891 analyzePageDrift', () => {
   test('a remote write that only lowered a stamp keeps the live cap', () => {
     const verdict = analyzePageDrift({ chain: [snap({ source_kind: 'manual' }), snap({ source_kind: 'webhook' }, 'remote')], stored: 'unknown', columns })!;
     expect(verdict.restore!.frontmatter.trust_tier).toBe('external_untrusted');
+  });
+  test('#10025: an ingested_at a remote write added to a page that had none is kept, not removed', () => {
+    expect(analyzePageDrift({ chain: [snap({ source_kind: 'webhook' }), snap({ source_kind: 'webhook', ingested_at: '2026-05-30T15:34:11.457Z' }, 'remote')],
+      stored: 'unknown', columns }, { includeAmbiguous: true })).toBeNull();
   });
   test('an unchanged history reports nothing', () => {
     expect(analyzePageDrift({ chain: [snap({ ingested_via: 'webhook' }), snap({ ingested_via: 'webhook' }, 'remote')], stored: 'unknown', columns })).toBeNull();

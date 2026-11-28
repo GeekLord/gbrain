@@ -22,14 +22,16 @@ import { closeSync, existsSync, openSync, readSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { openclawStateDir } from '../core/setup/brain-first.ts';
-import { mintedKeysReadCalls, type LayoutOutcome } from './setup-brain-layout.ts';
+import { chosenBrainEnv, companySourceFirst, COMPANY_SOURCE, labelsInCompany, mintedKeysReadCalls, shapeArgv, type BrainShape, type LayoutOutcome } from './setup-brain-layout.ts';
 import { opError, OperationError } from '../core/ops/contract.ts';
 import { ACCESS_ID_RE } from '../core/access/principals.ts';
 import { bunSpawnSync } from '../core/spawn.ts';
 import { loadConfig } from '../core/config.ts';
+import { getCliOptions } from '../core/cli-options.ts';
 import { companyRuleLines, readRoster, readsLines, rosterEmpty, type ServesReceipt, type ServesStatus, receiptLines, receiptOk } from './access-serves.ts';
 
-export interface ServesFlags { serves?: 'one' | 'several'; members?: string; membersFile?: string; source?: string; stdioMember?: string; labelledOnly?: boolean; openHistory?: boolean; owner?: string; dryRun: boolean }
+/** `source`: the source the members are labelled in, the harness's pinned source (--source, GBRAIN_SOURCE or a Codex receipt); unset, the labelling child resolves the brain's own (sources.default). `brain` and `team` are the run's --shape, so a pin on the company source adds it before labelling. */
+export interface ServesFlags { serves?: 'one' | 'several'; members?: string; membersFile?: string; source?: string; stdioMember?: string; labelledOnly?: boolean; openHistory?: boolean; owner?: string; brain?: BrainShape; team?: boolean; dryRun: boolean }
 
 /** GBRA-585 D: the login name of the person running setup as a member id (lower-cased, other characters as '-'), or null when none fits. */
 export function loginOwnerId(login?: string): string | null {
@@ -87,6 +89,8 @@ export interface ServesOutcome {
   owner_from?: ServesOwner['from'];
   /** GBRA-585 A: the labelling child run again after the layout step added the company source, so the keys this run minted read it. */
   regrant?: ServesReceipt;
+  /** GST-4043: the company source this run added before labelling the members in it (the layout step then keeps it). */
+  company_first?: NonNullable<LayoutOutcome['company']>;
   error?: string;
 }
 
@@ -95,8 +99,12 @@ export const PGLITE_SEVERAL_NOTE = 'PGLite lets one process at a time open this 
   + 'admin commands (access, sources, auth) and most reads refuse with pglite_busy until it stops, and every member\'s connection drops while it is down; '
   + 'page and fact writes (put, remember) still work through it. For a brain several people use, move to Postgres first: gbrain migrate --to postgres (docs/ENGINES.md#pglite-live-serve)';
 
-function child(launcher: string, args: string[]): { ok: boolean; stdout: string; stderr: string } {
-  const r = bunSpawnSync([launcher, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env });
+/**
+ * GST-4043: a gbrain child on the brain setup was run against (chosenBrainEnv: an explicit --brain, else what the harness
+ * resolves); a thin client ignores the variable, where an explicit --brain refuses.
+ */
+function child(launcher: string, args: string[], env: Record<string, string> = {}): { ok: boolean; stdout: string; stderr: string } {
+  const r = bunSpawnSync([launcher, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...chosenBrainEnv(), ...env } });
   return { ok: r.exitCode === 0, stdout: r.stdout?.toString() ?? '', stderr: r.stderr?.toString() ?? '' };
 }
 
@@ -159,7 +167,9 @@ export function historyRefusal(status: ServesStatus | null, preview: ServesRecei
   const ownerId = status.owner ?? owner?.id;
   const labelled = roster.filter(m => m !== ownerId);
   const pin = owner && (owner.from === 'flag' || (owner.id === ownerId && labelled.length < roster.length)) ? ['--owner', owner.id] : [];
-  const argvFor = (members: string[]) => ['gbrain', 'setup', harness, '--serves', 'several', '--members', members.join(','), ...(flags.source ? ['--source', flags.source] : []), ...pin];
+  const brain = getCliOptions().brain;
+  const at = brain ? ['--brain', brain] : [];
+  const argvFor = (members: string[]) => ['gbrain', ...at, 'setup', harness, ...shapeArgv(flags.brain, !!flags.team), '--serves', 'several', '--members', members.join(','), ...(flags.source ? ['--source', flags.source] : []), ...pin];
   const keep = [...argvFor(labelled.length ? labelled : roster), '--labelled-only'];
   const share = [...argvFor(roster), '--open-history'];
   const ownerOut = ownerId && labelled.length && labelled.length < roster.length ? `; the owner ${ownerId} reads the whole brain, so it is never labelled-only and stays out of that run's --members` : '';
@@ -168,7 +178,7 @@ export function historyRefusal(status: ServesStatus | null, preview: ServesRecei
     `Pick one: ${keep.join(' ')} keeps that history private (each member reads only pages labelled for them; with the company shape, setup adds one company/ rule so they read the company pages${ownerOut}), or ${share.join(' ')} lets every member read it.`,
     { fix: { argv: keep, consent: ['credentials'], actor: 'user', ask_user: true, requires_exclusive: false,
       why: 'Keeps the existing pages from the members; ask the user, who may instead choose --open-history so the members read them.',
-      verify: { argv: ['gbrain', 'access', 'serves', '--json'] } } });
+      verify: { argv: ['gbrain', ...at, 'access', 'serves', '--json'] } } });
 }
 
 /** --serves several: the labelling child (preview on a dry run) and, when applied, one bound read per member. */
@@ -208,6 +218,8 @@ export interface ServesPlan { roster: string[]; status: ServesStatus | null; own
 /**
  * Before setup writes anything: the roster (an empty one refuses), the brain's serves view (none for a brain setup is
  * about to create, or while this registration's own stdio serve holds a PGLite brain), and the one-person refusal.
+ * The history question's preview runs on the brain's default source when this run adds the company source it labels
+ * in (GST-4043), which does not exist yet and holds none of that history.
  */
 export function servesPreflight(flags: ServesFlags, launcher: string, harness: string, hasBrain: boolean, liveOurs: boolean, entry: EntryBinding = { member: null, previous: null }): ServesPlan | OperationError {
   const roster = servesRoster(flags, harness);
@@ -225,7 +237,10 @@ export function servesPreflight(flags: ServesFlags, launcher: string, harness: s
   if (flags.serves === 'several') {
     const owner = servesOwner(flags, harness, roster);
     if (owner instanceof OperationError) return owner;
-    const run = status?.serves === 'one' && !flags.labelledOnly && !flags.openHistory ? child(launcher, servesArgv(roster, flags, owner, false)) : null;
+    const ask = status?.serves === 'one' && !flags.labelledOnly && !flags.openHistory;
+    const companyFirst = ask && labelsInCompany(flags.brain, !!flags.team, flags.source) && companySourceFirst(launcher, true).action === 'created';
+    const run = !ask ? null : companyFirst ? child(launcher, servesArgv(roster, { ...flags, source: undefined }, owner, false), { GBRAIN_SOURCE: '' })
+      : child(launcher, servesArgv(roster, flags, owner, false));
     const preview = run ? parsed<ServesReceipt>(run.stdout) : null;
     const said = run ? `${run.stdout}\n${run.stderr}` : '';
     const previewError = said.match(/"code"\s*:\s*"([a-z0-9_]+)"/)?.[1] ?? run?.stderr.trim().split('\n')[0]?.slice(0, 200);
@@ -244,8 +259,13 @@ export function servesPreflight(flags: ServesFlags, launcher: string, harness: s
 /** The serves part of a setup run (a preview on a dry run), or null when it has nothing to do or say: a one-person brain with no bound entry. */
 export function servesApply(flags: ServesFlags, launcher: string, harness: string, plan: ServesPlan, hasBrain: boolean, entry: EntryBinding = { member: null, previous: null }): ServesOutcome | null {
   const several = flags.serves === 'several';
-  const labelled = !several ? null : hasBrain || !flags.dryRun ? runServesSeveral(launcher, plan.roster, flags, plan.owner)
-    : { mode: 'several' as const, note: `the new brain is created first; then ${plan.roster.join(', ')} each get a member, a folder rule and a bound key${plan.owner ? `, and ${plan.owner.id} is named the brain owner` : ''}` };
+  const inCompany = several && labelsInCompany(flags.brain, !!flags.team, flags.source);
+  const first = inCompany && (hasBrain || !flags.dryRun) ? companySourceFirst(launcher, flags.dryRun) : null;
+  const ahead = [...(hasBrain ? [] : ['the new brain is created']), ...(flags.dryRun && inCompany && (!hasBrain || first?.action === 'created') ? [`source ${COMPANY_SOURCE} is added`] : [])];
+  const labelled = !several ? null
+    : first?.action === 'failed' ? { mode: 'several' as const, error: `source ${COMPANY_SOURCE}, which the members are labelled in, could not be added: ${first.detail ?? 'unknown error'}` }
+    : !ahead.length || !flags.dryRun ? { ...runServesSeveral(launcher, plan.roster, flags, plan.owner), ...(first?.action === 'created' ? { company_first: first } : {}) }
+    : { mode: 'several' as const, note: `${ahead.join(' and ')} first; then ${plan.roster.join(', ')} each get a member, a folder rule and a bound key${plan.owner ? `, and ${plan.owner.id} is named the brain owner` : ''}` };
   const reread = several && !flags.dryRun ? readServesStatus(launcher) : null;
   const status = reread ? ('status' in reread ? reread.status : null) : plan.status;
   const preview = several && flags.dryRun && status?.serves !== 'several';
@@ -292,7 +312,9 @@ export function servesOk(o: ServesOutcome | null): boolean {
  */
 export function servesAfterLayout(o: ServesOutcome | null, flags: ServesFlags, launcher: string, plan: ServesPlan, layout: LayoutOutcome | null | undefined): ServesOutcome | null {
   if (!o || flags.serves !== 'several') return o;
-  if (layout?.company?.action !== 'created') {
+  const added = layout?.company?.action === 'created';
+  if (o.company_first && layout?.company?.action === 'kept') layout.company = o.company_first;
+  if (!added) {
     callReadersAfterServes(o.receipt, launcher, plan, layout);
     return o;
   }

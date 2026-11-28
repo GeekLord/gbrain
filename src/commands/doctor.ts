@@ -143,6 +143,8 @@ import { finalizeCheckFixes, fixLine, unknownScoreCategories, type CheckAgentFie
 import { throttleDoctorHeartbeat } from './doctor/heartbeat.ts';
 import { alertRanChecks, computeAlert, printAlertReport, type DoctorAlert } from './doctor/alert.ts';
 import type { RenderContext } from '../core/agent-output.ts';
+import { recordDoctor } from '../core/telemetry/client.ts';
+import type { EngineKind } from '../core/sql-engine-kind.ts';
 export interface Check extends CheckAgentFields {
   name: string;
   status: 'ok' | 'warn' | 'fail';
@@ -240,7 +242,7 @@ export interface DoctorReport {
    * where its URL came from. Additive + optional (schema_version stays 2);
    * absent on remote/report-only paths that don't know them.
    */
-  engine?: 'postgres' | 'pglite';
+  engine?: EngineKind;
   db_url_source?: DbUrlSource | null;
   /** E2: capabilities off by choice that bound what this brain can do (e.g. `embeddings_disabled`). Additive. */
   capped_by?: string[];
@@ -283,7 +285,7 @@ function _penaltyScore(checks: Check[]): number {
  */
 export function computeDoctorReport(
   checks: Check[],
-  extras?: { engine?: 'postgres' | 'pglite'; db_url_source?: DbUrlSource | null; render?: RenderContext; run?: DoctorRunSummary; alertRan?: ReadonlySet<string> },
+  extras?: { engine?: EngineKind; db_url_source?: DbUrlSource | null; render?: RenderContext; run?: DoctorRunSummary; alertRan?: ReadonlySet<string> },
 ): DoctorReport {
   const tagged = finalizeCheckFixes(checks, extras?.render).map((c) =>
     c.category ? c : { ...c, category: categorizeCheck(c.name) },
@@ -534,7 +536,7 @@ export async function runDoctor(
   const run = doctorRunSummary(args, deadline);
   const extras = { engine: engine?.kind, db_url_source: dbSource ?? null, run, alertRan: alertRanChecks(checks, parseDoctorTier(args), parseOnlyChecks(args)) };
   if (args.includes('--alert')) return setCliExitVerdict(printAlertReport(computeDoctorReport(checks, extras), jsonOutput));
-  const hasFail = outputResults(checks, jsonOutput, extras);
+  const hasFail = outputResults(checks, jsonOutput, extras, !parseOnlyChecks(args) && !args.includes('--fast') && parseDoctorScope(args) === 'all' && parseDoctorTier(args) !== 'ops');
 
   // Features teaser (non-JSON, non-failing only; never under the ops deadline)
   if (!jsonOutput && !hasFail && engine && run?.tier !== 'ops') {
@@ -567,6 +569,7 @@ function outputResults(
   checks: Check[],
   json: boolean,
   extras?: Parameters<typeof computeDoctorReport>[1],
+  fullRun = false,
 ): boolean {
   // v0.41.19.0 — render goes through computeDoctorReport so the human
   // output, JSON output, and remote MCP envelope all share one shape.
@@ -574,6 +577,7 @@ function outputResults(
   const hasFail = report.status === 'unhealthy';
   const hasWarn = report.status === 'warnings';
   const score = report.health_score;
+  if (fullRun) recordDoctor({ score, failing: checks.filter(c => c.status === 'fail').map(c => c.name), pages: Number(/^Connected, (\d+) pages/.exec(checks.find(c => c.name === 'connection')?.message ?? '')?.[1] ?? NaN) });
 
   if (json) {
     void writeJsonDocument(JSON.stringify(report)); // D2: the one --json document

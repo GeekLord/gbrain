@@ -24,9 +24,9 @@ Before it writes anything, setup resolves and prints:
 |---|---|
 | Brain | This install's config (`GBRAIN_HOME`). With none, a new keyless PGLite brain from `gbrain init --pglite --no-embedding`. |
 | Source | `--source`, else `GBRAIN_SOURCE`, else unpinned (the server uses the brain's default source). |
-| Transport | Local stdio: the harness starts `<launcher> serve --surface <surface>`, plus `--advertise verbs` on a new registration that chose no surface. |
+| Transport | Local stdio: the harness starts `<launcher> serve --surface <surface>`, plus `--advertise verbs` on a new Claude Code registration that chose no surface. |
 | Launcher | `--gbrain-bin`, else the absolute `gbrain` on `PATH` (GUI-launched hosts inherit no `PATH`, so a bare name is never written). |
-| Surface | `--surface`, else `GBRAIN_SURFACE`, else the surface already registered, else `starter`, listing only the seven memory verbs and `request_tools` (`--advertise verbs`). A chosen surface is listed in full; `--surface full` is the opt-in for every tool; an existing registration keeps its surface and listing. |
+| Surface | `--surface` (with `--advertise` to narrow its listing), else `GBRAIN_SURFACE`, else the surface already registered, else the harness default: Claude Code `starter`, listing only the seven memory verbs, `correct` and `request_tools` (`--advertise verbs`); Codex `full`, listed whole, because Codex does not reload its tool list and never calls a tool `request_tools` unlocks. A chosen surface is listed in full and recorded as pinned (`surface_origin: explicit` in the Codex receipt); an existing Claude Code registration keeps its surface and listing. A Codex entry that follows the default (`surface_origin: default`) moves with it on a re-run, and setup prints the move and the line that keeps the old entry; `gbrain setup codex --surface starter --advertise verbs` pins the old registration. `gbrain config set mcp.default_surface_<claude_code\|codex\|hermes> full\|starter` turns one harness's default (the activation and rollback knob; `config unset` restores the shipped default). |
 | Owner | Who owns the MCP name now: nobody, this setup (its receipt), or the gbrain Claude Code or Codex plugin (setup then adds hooks only). |
 
 It refuses with a coded error, before any write, when the target is not safe:
@@ -76,6 +76,13 @@ one. Automatic saving is separate from the capture decision above; while
 unanswered it comes back in a later session until the user answers or mutes
 it.
 
+A new personal brain that `gbrain setup claude-code` or `gbrain setup codex`
+created also gets the [first-session suggestion](first-session-suggestion.md):
+for the first 3 sessions within 14 days, the session-start context tells the
+agent to offer one thing it found in the brain, then one more import.
+`--no-suggestion` turns it off at install time (`gbrain onboarding off` later),
+and `--json` reports it as the `suggestion` marker next to `history`.
+
 ## States
 
 Setup reports how far the wiring is proven:
@@ -88,9 +95,9 @@ Setup reports how far the wiring is proven:
    fresh session of this harness yet. Open a new session (the harness reads
    its config at session start) and check that `/mcp` lists gbrain.
 
-In a new Claude Code session (SessionStart `startup` or `resume`) the
-SessionStart hook waits up to 4 seconds for the stdio serve Claude Code starts
-alongside it, then prints the context pack (recent world-visible facts; private
+In a new Claude Code or Codex session (SessionStart `startup` or `resume`)
+the SessionStart hook waits up to 4 seconds for the stdio serve the harness
+starts alongside it, then prints the context pack (recent world-visible facts; private
 facts are never pushed). Without the wait a fresh session got nothing, because
 the serve binds its socket about 2 seconds after spawn.
 4. `native-verified`: the capability table records an observed push for the
@@ -116,7 +123,7 @@ table with its `trusted_hash`, otherwise Codex lists it and silently skips it.
 `gbrain setup codex` writes:
 
 - `[mcp_servers.<name>]` with `command` (the hook launcher), `args` (`<launcher> serve …`) and
-  `env` (`GBRAIN_HOME`, `GBRAIN_SOURCE` when set): Codex starts stdio servers in
+  `env` (`GBRAIN_HOME`, `GBRAIN_SOURCE` and `GBRAIN_BRAIN_ID` when set): Codex starts stdio servers in
   the session's directory, so serve starts through the hook launcher too (#8426);
 - one hooks.json group per event, running
   `env GBRAIN_HOOK_LANE=setup … <hook launcher> <launcher> hook session-start|user-prompt --harness codex`
@@ -127,7 +134,11 @@ table with its `trusted_hash`, otherwise Codex lists it and silently skips it.
   SECURITY.md)
   (15 s), plus the detached `hook session-end --harness codex` capture command
   (3 s) only after `--capture`;
-- one trust table per group.
+- one trust table per group;
+- the top-level `mcp_optional_startup_grace_ms = 0`, only when the key is
+  unset, so Codex 0.151 and newer wait for gbrain to start instead of leaving
+  its tools out of the session after one second ([Codex guide](../mcp/CODEX.md)).
+  A value you set is kept, and `--remove` deletes the key only while it is still setup's `0`.
 
 Each of these entries is owned by its sha256 fingerprint (canonical JSON of the
 exact parsed entry), stored per entry in
@@ -161,8 +172,8 @@ One bot reading for all of them with one unbound key pulls one person's notes in
 another person's answers, so setup labels each person instead:
 
 ```bash
-gbrain setup claude-code --serves several --members alice-example,bob-example
-# or --members-file people.txt (one id per line)
+gbrain setup claude-code --members alice-example,bob-example
+# or --members-file people.txt (one id per line); naming people implies --serves several
 ```
 
 For each person this adds a member (existing ones are kept), a folder rule
@@ -199,7 +210,8 @@ the preview shows it first, and an owner that is already set is kept. No key is
 rebound: the receipt lists each live token or OAuth client bound to no member with
 the `gbrain auth rescope --token|--client <name> --member <owner>` command that
 binds it, so you bind your own keys on purpose.
-Each key setup mints writes to the run's source and reads a fixed list: that source,
+Each key setup mints writes to the run's source (the source the harness is pinned to:
+`--source`, `GBRAIN_SOURCE` or a Codex setup receipt; otherwise `sources.default`) and reads a fixed list: that source,
 the `company` source when it exists (`--shape company`), and every source federated
 when the key is minted. The preview names the list and how many pages `company` holds,
 how many of them are imported calls, and that every member reads them all, calls they
@@ -213,6 +225,15 @@ the key's write source, setup blocks the key instead and names the commands that
 or revoke it. Unfederating a source does not take it away from these keys either:
 `gbrain sources unfederate <id>` lists each member key that still reads it, with the
 `gbrain auth rescope --token <name> --sources <ids>` command that drops it.
+A re-run on another source moves a key setup minted with a list to write there and
+keeps its secret; a key setup did not mint that way, or whose list was changed by hand,
+is skipped with the `gbrain auth rescope` command that moves it and keeps what it reads.
+The people are labelled on the brain this run opens (`--brain`, `GBRAIN_BRAIN_ID`, else
+the one setup's directory resolves, a `.gbrain-mount` included), and the Claude Code or
+Codex entry pins that brain with `GBRAIN_BRAIN_ID`, so a session started in any other
+directory opens the same brain through MCP. The hooks still read the install's own config,
+and an entry the gbrain plugin owns is not pinned. A later run keeps the pin; an entry that labels nobody
+and names no brain stays unpinned, and its sessions' directory picks the brain.
 Keys minted before this (the default grant) are never changed. When the same run
 adds the `company` source (`--shape company`), setup labels the people first and then
 gives their new keys `company`; `company` itself stays out of default search.
@@ -258,7 +279,8 @@ a brain setup cannot read refuses (`setup_serves_unreadable`).
 `gbrain doctor` fails `unlabeled_people_folders` when such a brain has a
 `people/<name>/` folder with pages and no rule naming its readers.
 `gbrain access serves several --members ...` does the labelling alone (preview, then
-`--yes`).
+`--yes`); without `--source` it labels `GBRAIN_SOURCE`, then `sources.default`, and the
+directory it runs from never decides where member keys write.
 
 ### A member's key into their harness
 
@@ -326,7 +348,7 @@ may read (see below).
 | claude-code | `~/.claude/CLAUDE.md` (`--scope project`: `./CLAUDE.local.md`) |
 | codex | `$CODEX_HOME/AGENTS.md`, or a non-empty `AGENTS.override.md` (the file Codex loads) |
 | opencode | `~/.config/opencode/AGENTS.md` |
-| openclaw | `<workspace>/AGENTS.md` (`agents.defaults.workspace`, else `~/.openclaw/workspace`; several agents need `--workspace`) |
+| openclaw | `<workspace>/AGENTS.md` (`agents.defaults.workspace`, else `~/.openclaw/workspace`, under `$OPENCLAW_HOME` when set; several agents need `--workspace`) |
 | hermes | `$HERMES_HOME/SOUL.md`, after the identity text; never created, since a SOUL.md replaces Hermes's default identity |
 | cursor | `./.cursor/rules/gbrain-brain-first.mdc` (an always-applied project rule) |
 
@@ -372,6 +394,11 @@ brain and needs no MCP server or skill publication, so it works on a thin
 client and from a compiled binary. The index names the absolute launcher the
 install recorded, so the index and the skills it loads come from the same
 gbrain. MCP `get_skill` is unchanged.
+
+A tool that reads gbrain's skill files from disk (for example `skills/conventions/`)
+can ask `gbrain bundled-skill --json` for `skills_root`, the skills folder of
+the gbrain that is running, instead of walking up from the binary. It is
+`null` for a single-file binary, whose skills are read with `--asset`.
 
 | | |
 |---|---|

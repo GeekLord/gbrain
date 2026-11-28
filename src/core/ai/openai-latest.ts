@@ -37,7 +37,9 @@
  * Tier mapping mirrors the Anthropic ladder in TIER_DEFAULTS:
  *   utility → cheapest class (luna | nano | mini), reasoning/subagent → mid
  *   class (terra, else the flagship), deep → top class (sol | pro, else the
- *   bare family alias).
+ *   bare family alias). A family with no bare alias names each tier on its
+ *   own release (gpt-6-luna, gpt-6.2-sol), so a tier it lacks comes from the
+ *   newest family of the same generation that has it.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, renameSync, statSync } from 'node:fs';
@@ -116,13 +118,6 @@ export function parseOpenAIChatId(id: string): ParsedOpenAIChatId | null {
   return { id, family: [Number(m[1]), Number(m[2] ?? 0)], suffix };
 }
 
-/**
- * Priced for exact metering where a feature names the model (the #6188 fence
- * repair default), but not eligible as a discovered tier default: one priced
- * member of a newer family would otherwise become every tier's default.
- */
-const METERED_ONLY: ReadonlySet<string> = new Set(['gpt-6.1-sol']);
-
 function familyCmp(a: [number, number], b: [number, number]): number {
   return a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1];
 }
@@ -143,7 +138,7 @@ function pickBySuffix(members: ParsedOpenAIChatId[], order: readonly string[]): 
  */
 export function rankOpenAIChatModels(
   ids: string[],
-  priced: (id: string) => boolean = (id) => canonicalLookup(`openai:${id}`) !== undefined && !METERED_ONLY.has(id),
+  priced: (id: string) => boolean = (id) => canonicalLookup(`openai:${id}`) !== undefined,
 ): { tiers: OpenAITierPick | null; newestUnpriced?: string } {
   const parsed = ids.map(parseOpenAIChatId).filter((p): p is ParsedOpenAIChatId => p !== null);
   if (parsed.length === 0) return { tiers: null };
@@ -156,7 +151,11 @@ export function rankOpenAIChatModels(
 
   const newestFamily = eligible.reduce((best, p) =>
     familyCmp(p.family, best) > 0 ? p.family : best, eligible[0].family);
-  const members = eligible.filter((p) => familyCmp(p.family, newestFamily) === 0);
+  const newest = eligible.filter((p) => familyCmp(p.family, newestFamily) === 0);
+  const members = newest.some((p) => p.suffix === '')
+    ? newest
+    : [...newest, ...eligible.filter((p) => p.family[0] === newestFamily[0] && familyCmp(p.family, newestFamily) < 0
+        && !newest.some((n) => n.suffix === p.suffix)).sort((a, b) => familyCmp(b.family, a.family))];
   // Only surface an unpriced id when its family is strictly NEWER than the
   // newest priced family — accounts often still list obsolete unpriced ids
   // (legacy families), and warning about those tells a release engineer to

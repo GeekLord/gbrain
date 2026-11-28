@@ -141,7 +141,8 @@ behave as you'd expect — every page appears in search.
 
 Flip later with `gbrain sources federate <id>` / `unfederate <id>`. Federating
 a source (or restoring it, which re-federates) lets every connection with no
-source grant read it, including pages a member-bound credential wrote there
+source grant read it (except a key bound to another member when the source is
+someone's personal source; see below), including pages a member-bound credential wrote there
 without `readable_by`. The command still federates, and it lists the pages a
 remote token or OAuth client wrote there without readers (count, a few slugs
 with the member each credential is bound to now, `pages_exposed` under `--json`)
@@ -272,7 +273,8 @@ A trusted system that names the person on each call (QM's `x-qm-actor`) can
 share one client instead: grant it every member's source and bind each source
 to its member (`gbrain access member source add alice-example dm-alice-example`).
 An attested call then reads the grant minus sources bound to other members,
-and binding never adds a source to a grant
+and so does a key bound to a member other than the owner that has no source
+list. Binding never adds a source to a grant
 ([QM guide](qm.md#each-persons-own-sources)).
 
 ### Lay out sources by who may read them
@@ -504,6 +506,13 @@ gbrain sources set-sync <id> <on|off> [--dry-run] [--expect <on|off>]
                                Off: autopilot cycles work only on pages changed since
                                the last cycle, so a file edited on disk is picked up
                                by the next explicit sync, not by the cycle.
+gbrain sources set-extract-atoms <id> <on|off> [--dry-run] [--expect <on|off>]
+                               Include or keep the source out of provider-based atom
+                               extraction (config.extract_atoms; default on). Off: its
+                               pages stay synced and searchable, the cycle, dream
+                               --drain and the auto-drain skip it, and doctor counts
+                               its pages apart instead of warning. Preview-first like
+                               set-sync.
 gbrain sources rebind <id> [--expect <current-push-urls>] [--yes] [--json]
                                iMessage sources: record a changed push destination
                                for the source's .gbrain-owned/ folder. Previews
@@ -557,9 +566,12 @@ pull succeeds. A page write into the source (`put_page`, a timeline entry, a
 maintenance write) is stored database-only too; its receipt says
 `storage: "database_only"` with `write_through.skipped: "mirror_read_only"`.
 `gbrain sources list --json` shows `mirror_read_only` per source. Undo it with
-`gbrain sources mirror-writable <id>`; files are written again from the next
-write on, except for pages created while the source was a mirror: those have
-no file in the checkout and stay database-only. Git effects of a mirror's
+`gbrain sources mirror-writable <id>`. Pages created while the source was a
+mirror have no file in the checkout and stay database-only. Other writes
+resume under the source's usual rules: if a non-default checkout is not
+Git-canonical and this host does not commit to it, managed atom writes and
+sync's metadata updates still stay in the database (`foreign_checkout`).
+Git effects of a mirror's
 writes (for example a `forget`) complete as skipped. The flag is off by default.
 With `sync.write_through` off, sync keeps that canonical metadata in the
 database for every source, mirror or not, and never rewrites a checkout file.

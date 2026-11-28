@@ -69,7 +69,7 @@ export const SOURCE_CHECKOUT_MISSING = 'source_checkout_missing';
  * (`storedCheckoutRefusal` in verb-errors.ts): the checkout is missing, was recreated at its recorded path
  * (`physicalRootDirectoryChangedError`), or holds an ownership record other users can read (`ownershipRecordNotPrivateError`).
  */
-export const CHECKOUT_REFUSAL_ORIGINS = [SOURCE_CHECKOUT_MISSING, 'physical_root_directory_changed', 'ownership_record_not_private'] as const;
+export const CHECKOUT_REFUSAL_ORIGINS = [SOURCE_CHECKOUT_MISSING, 'physical_root_directory_changed', 'ownership_record_not_private', 'ownership_reservation_missing'] as const;
 export type CheckoutRefusalOrigin = typeof CHECKOUT_REFUSAL_ORIGINS[number];
 export interface CheckoutRefusalDetail { origin: CheckoutRefusalOrigin; stage?: PublicationStage; attempt?: { consumer_version: string; consumer_host_id: string | null } }
 /** #6693: a page write refused because its file holds a committed change sync has not imported (`pending_import`) or sync holds the file (`sync_held`). */
@@ -89,7 +89,20 @@ export interface StagingRefusalDetail {
   staging: { staging_id: string; state?: string | null; reason?: 'generation_incomplete'; rows?: number; segment_count?: number; covered_bytes?: number | null; body_bytes?: number };
   stage?: PublicationStage; attempt?: { consumer_version: string; consumer_host_id: string | null };
 }
-export interface PublicationFailure { code: string; message: string; detail?: PublicationFailureDetail | FenceRefusalDetail | WithdrawalRefusalDetail | OwnerExceptionDetail | CanonicalFileDetail | CheckoutRefusalDetail | PendingImportDetail | SourceChangedDetail | StagingRefusalDetail }
+/**
+ * A shared-skill publication refused because a shared file would reach callers a skill that keeps it does not show it
+ * to (`shared-skills/publication.ts` refuseHiddenExposure). The closed reason outlives the receipt, so a waiter or a
+ * replay of a queued request reads the same typed reason the direct refusal carries.
+ */
+export const SHARED_FILE_AUDIENCE_REASONS = ['shared_file_hidden_holder', 'shared_file_holder_narrowed'] as const;
+export type SharedFileAudienceReason = typeof SHARED_FILE_AUDIENCE_REASONS[number];
+export interface SharedFileAudienceDetail { origin: SharedFileAudienceReason; stage?: PublicationStage; attempt?: { consumer_version: string; consumer_host_id: string | null } }
+/** The closed shared-file audience reason a stored failure detail holds, if any. */
+export function sharedFileAudienceReason(detail: unknown): SharedFileAudienceReason | undefined {
+  const origin = (detail as { origin?: unknown } | null | undefined)?.origin;
+  return (SHARED_FILE_AUDIENCE_REASONS as readonly unknown[]).includes(origin) ? origin as SharedFileAudienceReason : undefined;
+}
+export interface PublicationFailure { code: string; message: string; detail?: PublicationFailureDetail | FenceRefusalDetail | WithdrawalRefusalDetail | OwnerExceptionDetail | CanonicalFileDetail | CheckoutRefusalDetail | PendingImportDetail | SourceChangedDetail | StagingRefusalDetail | SharedFileAudienceDetail }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STAGING_STATES: readonly unknown[] = ['open', 'sealed', 'prepared', 'committed', 'aborted', 'expired'];

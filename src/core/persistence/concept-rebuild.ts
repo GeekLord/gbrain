@@ -29,6 +29,7 @@ import { PRIVACY_ALIASES, privacyPartSql, privatePagesFilterFragment } from '../
 import { preservedConceptSections } from '../cycle/concept-sections.ts';
 import { boundedBodyPrefixSql } from '../page-window/bounded-lead.ts';
 import { BOUNDED_PREFIX_BYTES } from '../page-window/document.ts';
+import { holdAppliesToPageSql } from '../write-gate-binding.ts';
 
 type Sql = Pick<BrainEngine, 'executeRaw'>;
 
@@ -108,7 +109,7 @@ const STATED_SQL = `SELECT array_remove(ARRAY[
   CASE WHEN EXISTS (SELECT 1 FROM page_aliases a WHERE a.source_id = $2 AND a.slug = $3) THEN 'page_aliases' END,
   CASE WHEN EXISTS (SELECT 1 FROM slug_aliases a WHERE a.source_id = $2 AND a.canonical_slug = $3) THEN 'slug_aliases' END,
   CASE WHEN EXISTS (SELECT 1 FROM core_edit_notices c WHERE c.source_id = $2 AND c.slug = $3) THEN 'core_edit_notices' END,
-  CASE WHEN EXISTS (SELECT 1 FROM write_gate_holds h WHERE h.source_id = $2 AND h.slug = $3) THEN 'write_gate_holds' END,
+  CASE WHEN EXISTS (SELECT 1 FROM write_gate_holds h WHERE h.source_id = $2 AND ${holdAppliesToPageSql('h', '$1', '$3')}) THEN 'write_gate_holds' END,
   CASE WHEN EXISTS (SELECT 1 FROM pages p WHERE p.id = $1 AND p.title <> replace(regexp_replace(p.slug, '^.*/', ''), '-', ' ')) THEN 'title' END,
   CASE WHEN EXISTS (SELECT 1 FROM pages p, jsonb_each(p.frontmatter) e WHERE p.id = $1 AND e.key <> ALL($6::text[]) AND e.key <> ALL($5::text[])
     AND NOT (e.key = 'tags' AND e.value = '[]'::jsonb)) THEN 'frontmatter' END,
@@ -313,7 +314,7 @@ export async function readHeldConcepts(engine: Sql, model: boolean): Promise<{ h
 async function readHeldConceptRows(engine: Sql, model: boolean): Promise<{ held: Array<{ source_id: string; slug: string }>; kept: RebuildKept[] }> {
   const rows = await engine.executeRaw<{ id: number; source_id: string; slug: string; private: boolean; members_private: boolean }>(`SELECT p.id, p.source_id, p.slug,
     NOT ${privacyPartSql('p')} AS private,
-    EXISTS (SELECT 1 FROM derivation_inputs d JOIN pages m ON m.id::text = d.input_id AND d.input_table = 'pages'
+    EXISTS (SELECT 1 FROM derivation_inputs d JOIN pages m ON m.id = (CASE WHEN d.input_id ~ '^[0-9]{1,18}$' THEN d.input_id::bigint END) AND d.input_table = 'pages'
       WHERE d.derived_table = 'pages' AND d.derived_id = p.id::text AND m.deleted_at IS NULL AND NOT (${privatePagesFilterFragment('m')})) AS members_private
     FROM pages p WHERE ${HELD_SQL} ORDER BY p.source_id, p.slug`);
   const kept: RebuildKept[] = [];

@@ -7,6 +7,15 @@
  */
 import type { Capability } from '../engine-capabilities.ts';
 import type { BrainEngine } from '../engine.ts';
+import { FOUNDATION_MEMBERS } from './members/foundation.ts';
+import { PAGES_MEMBERS } from './members/pages.ts';
+import { CONTENT_MEMBERS } from './members/content.ts';
+import { FACTS_MEMBERS } from './members/facts.ts';
+import { CYCLE_MEMBERS } from './members/cycle.ts';
+import { PERSISTENCE_MEMBERS } from './members/persistence.ts';
+import { ACCESS_MEMBERS } from './members/access.ts';
+import { JOBS_MEMBERS } from './members/jobs.ts';
+import { LEDGER_MEMBERS } from './members/ledgers.ts';
 
 export type MemberClass = 'implemented' | Capability;
 
@@ -97,9 +106,19 @@ export const RUST_ENGINE_MEMBERS = {
   // sources
   getSource: 'sources',
   listSourceLocalPaths: 'sources',
+  listLocalPathSources: 'sources',
+  listSourceRoutingRows: 'sources',
+  countDefaultSourceSplit: 'sources',
+  readSourceRow: 'sources',
+  listSourceRecords: 'sources',
+  listActiveSourceConfigs: 'sources',
+  readSourceIncarnation: 'sources',
+  hasCompanyBrainReceipt: 'sources',
+  readGuestSourceRow: 'sources',
   getSourceStrictness: 'sources',
   listAllSources: 'sources',
   updateSourceConfig: 'sources',
+  markSourceSynced: 'sources',
   // config
   getConfigValues: 'config',
   getConfig: 'config',
@@ -298,6 +317,7 @@ export const RUST_ENGINE_MEMBERS = {
   readPersistenceBrainId: 'persistence_journal',
   readLocalWriterRow: 'persistence_journal',
   insertLocalWriterRow: 'persistence_journal',
+  ownsSchemaTables: 'persistence_journal',
   readLedgerSource: 'persistence_journal',
   // access_control
   isFolderRestricted: 'access_control',
@@ -312,9 +332,42 @@ export const RUST_ENGINE_MEMBERS = {
   listSegmentedPages: 'raw_sql',
   invalidateWithdrawnPages: 'raw_sql',
   hasWithdrawnFenceClaim: 'raw_sql',
-  // The decide store and proposal lanes (engine-sql/decide-store.ts, decide-proposals.ts), served by the store.
+  // N3 reads the Rust store does not serve through this engine yet (engine-sql/{alias-fanout-reads,export-reads,trust-tier-reads,
+  // withdrawal-discovery,belief}.ts): refused as the raw SQL they replace, so the reported capabilities stay as before.
+  readEntityAliasRows: 'raw_sql',
+  readPageAliasRows: 'raw_sql',
+  readPageTitle: 'raw_sql',
+  resolveCaseSensitiveAliases: 'raw_sql',
+  listAccessPolicySourceIds: 'raw_sql',
+  listExportPageKeys: 'raw_sql',
+  listExportWithdrawals: 'raw_sql',
+  listForcedCutSeqs: 'raw_sql',
+  normalizeFenceLines: 'raw_sql',
+  readBodyManifestMeta: 'raw_sql',
+  readBodyManifestOutline: 'raw_sql',
+  readBodyManifestRows: 'raw_sql',
+  readExportPageRows: 'raw_sql',
+  readExportWithdrawalLedgerBytes: 'raw_sql',
+  readSegmentedVersionBodyBytes: 'raw_sql',
+  listVersionReasonWriters: 'raw_sql',
+  readWithdrawalDiscovery: 'raw_sql',
+  // Queue health reads (engine-sql/jobs-health.ts), answered from the store's job rows (rust/crates/gbrain-store/src/jobs/health.rs).
+  listPrivateQueueHealth: 'minion_queue',
+  listQueueWedgeCounts: 'minion_queue',
+  listStuckActiveJobsByName: 'minion_queue',
+  listWaitingByQueue: 'minion_queue',
+  readOldestWaitingAge: 'minion_queue',
+  readQueueDivergence: 'minion_queue',
+  readQueueHealthSignals: 'minion_queue',
+  readWedgeSignals: 'minion_queue',
+  // The decide store and proposal lanes, open loops, timeline reads and the write-side reads (engine-sql/decide-*.ts,
+  // open-loops.ts, timeline-reads.ts, write-misc.ts). A member with no native method yet is classed raw_sql (the capability of the executeRaw it replaces), so the reported
+  // capability list stays as on master; its adapter lands with its native method.
   applyDecideReviewQueue: 'eval_capture',
   applyDecideSweepDeferred: 'eval_capture',
+  closeOpenLoop: 'facts',
+  countSegmentedTimelinePages: 'raw_sql',
+  countTimelineCommentMarkupRows: 'raw_sql',
   dailyDecideSpend: 'eval_capture',
   decideConflictNoEntityCounts: 'eval_capture',
   decideSlotUsage: 'eval_capture',
@@ -323,11 +376,17 @@ export const RUST_ENGINE_MEMBERS = {
   getDecideCalibration: 'eval_capture',
   getDecideProposal: 'eval_capture',
   getDecideReviewProposal: 'eval_capture',
+  getWorktreeBinding: 'raw_sql',
+  readIgnoredPrivacyLabelPages: 'pages',
+  readLivePageFrontmatter: 'pages',
+  hasExtractedEvents: 'raw_sql',
   insertDecideCalibration: 'eval_capture',
   insertDecideProposal: 'eval_capture',
   insertDecideReceipts: 'eval_capture',
   insertDecideReviewProposal: 'eval_capture',
   insertDecideSpend: 'eval_capture',
+  listActiveAccessMembers: 'raw_sql',
+  listAwaitingMemoryProposals: 'raw_sql',
   listDecideCalibrations: 'eval_capture',
   listDecideMixedModelDecisions: 'eval_capture',
   listDecideProposalIds: 'eval_capture',
@@ -341,14 +400,43 @@ export const RUST_ENGINE_MEMBERS = {
   listDecideSpendBySlot: 'eval_capture',
   listDueDecideReviewQueue: 'eval_capture',
   listDueDecideSweepDeferred: 'eval_capture',
+  listMemoryProposalRows: 'raw_sql',
+  listOpenLoops: 'facts',
+  countOpenLoopsByCounterpartyEmail: 'facts',
+  listPendingCoreEditNotices: 'pages',
+  purgeStaleAppliedCaptures: 'ingest_log',
+  listOwnerProposalRows: 'raw_sql',
+  listSharedSkillPackRoots: 'raw_sql',
+  listSynopsisSourceIds: 'raw_sql',
+  listTimelineOrphanPages: 'raw_sql',
   pruneDecideReceipts: 'eval_capture',
+  readAdmissionSource: 'raw_sql',
   readDecideState: 'eval_capture',
+  readEntityOpenLoops: 'facts',
+  readHealthMemoClock: 'raw_sql',
+  readMaxTimelineEntryId: 'raw_sql',
+  readMemoryProposal: 'raw_sql',
+  readPendingProposalSummary: 'raw_sql',
   readProposalReviewRates: 'eval_capture',
+  sampleEffectiveDateSources: 'raw_sql',
+  sampleEffectiveDates: 'raw_sql',
   setDecideCalibrationRetired: 'eval_capture',
+  sharedSkillPackTablePresent: 'raw_sql',
   storeDecideQualification: 'eval_capture',
+  storedTimelineRowsByPageIds: 'raw_sql',
   transitionDecideProposal: 'eval_capture',
   transitionDecideReviewProposal: 'eval_capture',
   upsertDecideState: 'eval_capture',
+  upsertOpenLoop: 'facts',
+  ...FOUNDATION_MEMBERS,
+  ...PAGES_MEMBERS,
+  ...CONTENT_MEMBERS,
+  ...FACTS_MEMBERS,
+  ...CYCLE_MEMBERS,
+  ...PERSISTENCE_MEMBERS,
+  ...ACCESS_MEMBERS,
+  ...JOBS_MEMBERS,
+  ...LEDGER_MEMBERS,
 } as const satisfies Record<keyof BrainEngine, MemberClass>;
 
 export type RustEngineMember = keyof typeof RUST_ENGINE_MEMBERS;

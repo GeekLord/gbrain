@@ -1,6 +1,7 @@
 ---
 name: briefing
 version: 1.3.0
+audience: owner
 description: Compile daily briefing with meeting context, active deals, and citation tracking
 triggers:
   - "daily briefing"
@@ -15,7 +16,6 @@ tools:
   - list_pages
   - get_timeline
 mutating: false
-upstream: briefing@fc834ee
 when_to_use: "Use when the user asks: \"daily briefing\", \"morning briefing\", \"what's happening today\", \"brain pulse\", \"pre-briefing pull\"."
 ---
 
@@ -160,6 +160,7 @@ Run these queries to populate the briefing sections:
 - `gbrain query "meetings this week"` -- recent meeting pages with insights
 - `gbrain query "pending commitments follow-ups"` -- open threads and action items
 - `gbrain list --type person --sort updated_desc --limit 10` -- people in play
+- `gbrain learned` -- what last night's run learned; the user keeps or undoes items with `gbrain learned-keep <ids|all>` and `gbrain learned-undo <ids>`
 
 ## Output Format
 

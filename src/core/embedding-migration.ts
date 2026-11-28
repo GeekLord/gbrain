@@ -115,7 +115,7 @@ const ifNotExists = (def: string) => def.replace(/^CREATE (UNIQUE )?INDEX /, 'CR
  * IF NOT EXISTS on CREATE INDEX makes the operation safe to re-run during
  * `--resume`.
  */
-export async function runSchemaTransition(engine: BrainEngine, targetDim: number, assertOwned?: (tx: BrainEngine) => Promise<void>): Promise<DeferredAnnIndex[]> {
+export async function runSchemaTransition(engine: BrainEngine, targetDim: number, assertOwned?: MigrationLeaseAssert): Promise<DeferredAnnIndex[]> {
   // Sink-side guard: targetDim is interpolated into DDL below. Every current
   // caller validates upstream, but a future programmatic caller passing an
   // unvalidated value must fail HERE, not become SQL in an admin DDL path
@@ -124,8 +124,9 @@ export async function runSchemaTransition(engine: BrainEngine, targetDim: number
     throw new Error(`runSchemaTransition: targetDim must be a positive integer, got ${String(targetDim)}`);
   }
   const deferred = await engine.transaction(async (tx) => {
-    await assertOwned?.(tx);
+    await assertOwned?.(tx, { rowLock: false }); // #9864: lock the lease rows after the census, right before the DDL (#6587)
     await assertRetainedEmbeddingRebuildability(tx, targetDim);
+    await assertOwned?.(tx);
     // #4252: capture every index the DROP COLUMN below will cascade-drop.
     // pg_depend holds the exact column→index dependency edges the cascade
     // follows, so this also catches indexes that reference the column only
@@ -1031,6 +1032,7 @@ export interface MigrationVerify {
      *  must never silently hide them. */
     embed_skip_null_chunks: number;
     marker: 'none' | 'same_target' | 'different_target' | 'corrupt';
+    db_plane_ok: boolean;
     file_plane_ok: boolean;
   };
 }
@@ -1158,6 +1160,11 @@ export async function verifyMigrationComplete(
     // blocker for THIS target; readMigrationStatus surfaces it.
   }
 
+  // #10231: a database label other than the target (an older release stored it without its provider) is not converged; a run rewrites only the label.
+  const dbModel = await engine.getConfig('embedding_model'), dbDims = await engine.getConfig('embedding_dimensions');
+  const dbPlaneOk = dbModel === target.toModel && Number(dbDims) === target.toDims;
+  if (!dbPlaneOk) blockers.push(`database config records ${dbModel ?? '(no model)'} at ${dbDims ?? '(no dimensions)'}d, target is ${target.toModel} at ${target.toDims}d`);
+
   const fp = opts.filePlane;
   const filePlaneOk = fp
     ? fp.model === target.toModel && Number(fp.dims) === target.toDims
@@ -1181,6 +1188,7 @@ export async function verifyMigrationComplete(
       chunkless_pages: chunkless,
       embed_skip_null_chunks: embedSkipNull,
       marker: markerState,
+      db_plane_ok: dbPlaneOk,
       file_plane_ok: filePlaneOk,
     },
   };
@@ -1334,8 +1342,9 @@ export async function applyEmbeddingMigration(
 
     // 5. File plane + gateway (the embed pipeline reads file/env, not DB).
     if (opts.persistConfig) await engine.transaction(async tx => {
-      await opts.assertOwned?.(tx);
+      await opts.assertOwned?.(tx, { rowLock: false }); // #9864: lock the lease rows after the census, right before the write
       await assertRetainedEmbeddingRebuildability(tx, plan.to_dims, plan.to_model, plan);
+      await opts.assertOwned?.(tx);
       await opts.persistConfig!(plan.to_model, plan.to_dims, tx);
     });
 

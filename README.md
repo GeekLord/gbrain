@@ -134,7 +134,7 @@ The repo is not a complete backup; see the [bootstrap guide](docs/guides/bootstr
 
 ### Connect GBrain to your AI client (MCP)
 
-- **Local stdio client:** `gbrain setup claude-code` or `gbrain setup codex` registers `gbrain serve` (lists the memory verbs; `--surface full` lists every tool) behind gbrain's launcher, so a session opened in a cloned repository never loads that repository's `bunfig.toml` or `.env`, and adds the brain-first instructions: agents seldom call a brain nobody told them about. Cursor, Windsurf and other stdio clients take `"$(command -v gbrain)" serve --surface starter --advertise verbs`.
+- **Local stdio client:** `gbrain setup claude-code` or `gbrain setup codex` registers `gbrain serve` (Claude Code lists the memory verbs, Codex every tool) behind gbrain's launcher, so a session opened in a cloned repository never loads that repository's `bunfig.toml` or `.env`, and adds the brain-first instructions: agents seldom call a brain nobody told them about. Cursor, Windsurf and other stdio clients take `"$(command -v gbrain)" serve --surface starter --advertise verbs`.
 - **Plugins with curated skills:** Codex `codex plugin marketplace add garrytan/gbrain@codex-plugin` + `codex plugin add gbrain@gbrain`; Claude Code `/plugin marketplace add garrytan/gbrain` + `/plugin install gbrain@gbrain`.
 - **This brain from anywhere:** `gbrain mcp expose` publishes it on your Tailscale tailnet as a user service (`--funnel` for cloud agents such as Grok Bot, Muse and ChatGPT). [Guide](docs/guides/remote-mcp.md).
 - **A brain on another host:** `gbrain connect https://your-host/mcp --token gbrain_xxx --install` (add `--agent codex` for Codex). Hosted brains use [native OAuth or a private handoff](docs/guides/hosted-harness-access.md); dashboard, clients and permissions live in [MCP administration](docs/mcp/ADMIN.md).
@@ -166,9 +166,9 @@ Alongside keyword and semantic retrieval, GBrain offers two optional ways to use
 
 The point of building a 150K-page brain is to use it as a strategic moat. To never lose context. To query what's in your own head without re-reading it. The brain layer is what makes the moat usable. The 24/7 dream cycle is what keeps it sharp. Both run on your hardware, your DB, your keys.
 
-It's easier to ship a daemon that runs 24/7 to ingest, enrich, and consolidate than it is to keep an agent in chat working hard. GBrain is that daemon, generalized. Install in 30 minutes. Your agent does the work. As my personal agent gets smarter, so does yours.
+It's easier to ship a daemon that runs 24/7 to ingest, enrich, and consolidate than it is to keep an agent in chat working hard. GBrain is that daemon, generalized. Install in a few minutes: on a cloud machine a cold `bun install -g` took about 11 seconds and `gbrain setup claude-code` about 10 (gbrain v0.60.769.0); the rest is you reading the output and opening a new session. Your agent does the work. As my personal agent gets smarter, so does yours.
 
-> **Start keyless.** Your harness subscription and any separately configured model API usage are different costs. The optional personal-agent bootstrap takes about 15 minutes; always-on enrichment needs its own compute and API configuration.
+> **Start keyless.** Your harness subscription and any separately configured model API usage are different costs. The optional personal-agent bootstrap takes about 15 more minutes of your time, mostly answering its interview; always-on enrichment needs its own compute and API configuration.
 
 Durable preferences and facts can be shared across agents; transient task and
 harness configuration state stay local. Configured cloud embedding, reranking,
@@ -319,6 +319,7 @@ Want to see a tutorial that isn't here yet? [Open an issue](https://github.com/g
 - **Brain-first lookup** before any external API call. The cheapest, fastest, most personal information source you have.
 - **Auto-link** extracts graph links for trusted local page writes. No LLM calls; pure pattern matching on page references such as `[[people/alice-example]]`. Unresolved extracted facts keep their provenance without inventing a backing page.
 - **Cron-driven enrichment** runs while you sleep: dedup people pages, fix citations, score salience, find contradictions, prep tomorrow's tasks.
+- **The morning note** shows what the night learned, each item with where it came from, and lets you keep it or undo it: see [the morning note](docs/guides/morning-note.md).
 
 The whole loop is described in [`docs/architecture/topologies.md`](docs/architecture/topologies.md) with diagrams.
 
@@ -377,13 +378,21 @@ flowchart LR
     Synthesis --> Answer[Cited answer]
 ```
 
-**Two engines, one contract.** PGLite (Postgres 17 via WASM, zero-config, default) for personal brains up to ~50K pages. Postgres + pgvector (Supabase or self-hosted) for shared, large or multi-machine brains. Both implement one `BrainEngine` contract ([`src/core/engine.ts`](src/core/engine.ts)); CLI and MCP share one op registry.
+**Two engines, one contract.** PGLite (Postgres 17 via WASM, zero-config, default) for personal brains up to roughly 30K pages, about 200K embedded chunks: past about 300K chunks PGLite can no longer build the vector index, and `gbrain doctor` warns before that ([ceiling](docs/ENGINES.md#pglite-vector-index-ceiling)). Postgres + pgvector (Supabase or self-hosted) for shared, large or multi-machine brains. Both implement one `BrainEngine` contract ([`src/core/engine.ts`](src/core/engine.ts)); CLI and MCP share one op registry.
 
 **Canonical files preserve file-backed knowledge.** Your brain repo holds the Markdown; the database is an index rebuildable from it, and git deletes become soft-deletes. DB-only pages, unresolved facts, history and operational state need a database backup: [where your memory lives](docs/guides/where-your-memory-lives.md), [system of record](docs/architecture/system-of-record.md). Publish public subsets, share team mounts, or point a thin client at a colleague's brain. Topologies in [`docs/architecture/topologies.md`](docs/architecture/topologies.md).
 
 **Two organizational axes (brain ⊥ source).** A *brain* is a database (your personal brain, a team mount you joined). A *source* is a repo inside that brain. Routing uses `.gbrain-source` dotfiles and a 6-tier precedence chain. Diagrams in [`docs/architecture/brains-and-sources.md`](docs/architecture/brains-and-sources.md).
 
 **Why the graph matters.** Vector search finds similar text; graph retrieval follows stored relationships. Extracted edges are evidence to inspect, not proof that a relationship is true. Graph freshness depends on the write path and maintenance described in [memory boundaries](docs/guides/memory-boundaries.md#page-writes-and-the-graph-are-separate-outcomes). Deep dive: [retrieval architecture](docs/architecture/RETRIEVAL.md); [entity recall](docs/guides/entity-recall.md).
+
+## Privacy & telemetry
+
+gbrain sends no automatic usage reports unless you say yes. This release ships no telemetry address, so by default it sends nothing and setup doesn't ask. To test a server, set `GBRAIN_TELEMETRY_URL` in your own environment and supply its publishable key in `GBRAIN_TELEMETRY_KEY` if it needs one. A repository's `.env` cannot set these. Once a release ships an address, your agent asks you once on first setup. Any setup or upgrade results from before you answer wait in a local file (at most 50, for 7 days), are sent only if you say yes, and are deleted if you say no.
+
+A yes sends your answer, which harness setup ran and whether it worked, upgrade results, the doctor score band, counts of commands and error codes, the gbrain version, OS and, unless you pick `anonymous`, a random install id. It never sends your pages, slugs, titles, queries, file paths, source names, hostnames or error messages. `gbrain telemetry show` prints what is waiting, the next payload and a summary of recent sends; add `--json` to see their payloads. `gbrain telemetry off` turns off reporting and deletes the queue. `gbrain telemetry forget` asks the server to delete your install's record and unlink its stored events from the id, so they remain only as anonymous rows. Stored events are kept for 400 days. At any tier, `pulse` can contact a configured server, and `forget` can too if a local install id exists. The server side isn't deployed yet. The [deployment blockers](TODOS.md#opt-in-telemetry-client-follow-ups-filed-2026-11-22-telemetry-pr-2) include a send that finishes on the server after a successful `forget` and brings back the record.
+
+Data goes to a Supabase project gbrain shares with gstack, in its own tables, through one validated endpoint; the public key the client sends can't read or write any table. Aggregates are public (`gbrain telemetry pulse`). An agent can still answer for you if it ignores its instructions, which is why the question names you as the one to answer. Full field list: [docs/guides/telemetry.md](docs/guides/telemetry.md).
 
 ## Troubleshooting
 
@@ -406,7 +415,8 @@ Start with `gbrain doctor`. For database access failures, use `gbrain engine sta
 - [MCP task guide](docs/mcp/README.md) — deployment and per-client setup (Claude Desktop, Code, Cursor, ChatGPT, Perplexity, Cowork)
 - [MCP administration](docs/mcp/ADMIN.md) — owner dashboard access, client registration, OAuth, permissions, and token recovery
 - [Evals](docs/eval/) and [research](docs/research/) — methods and results
-- [Rust engine plan](docs/designs/RUST_ENGINE.md) — design for a third storage engine; the experimental Rust store already serves keyword search, title search, chunk reads, vector search, embeddings, links, takes, salience, facts, page operations, raw data and file records, ontology claims, chronicle projections, eval capture, dream verdicts, contradiction runs and the code call graph, and a second process on the same brain reaches it through the owner process, but nothing selects it yet; its [research maps](docs/designs/rust-engine/research/README.md) and [review record](docs/designs/rust-engine/review-record.md)
+- [How gbrain compares](docs/proof.md) — six measured results against simpler setups, including two where the simpler setup wins; [what you'd build without gbrain](docs/guides/what-youd-build.md)
+- [Rust engine plan](docs/designs/RUST_ENGINE.md) — design for a third storage engine; the experimental Rust store already serves keyword search, title search, chunk reads, vector search, embeddings, links, takes, salience, facts, page operations, raw data and file records, ontology claims, chronicle projections, eval capture, dream verdicts, contradiction runs and the code call graph, and a second process on the same brain reaches it through the owner process; the CLI opens it only when `~/.gbrain/config.json` sets `"engine": "rust"` by hand (experimental: commands that need raw SQL, such as `import`, refuse with `engine_capability_missing`); its [research maps](docs/designs/rust-engine/research/README.md) and [review record](docs/designs/rust-engine/review-record.md)
 - [`docs/ethos/`](docs/ethos/) — philosophy (thin harness, fat skills, markdown as recipes, origin story)
 - [`AGENTS.md`](AGENTS.md) — entry point for non-Claude agents
 - [`CLAUDE.md`](CLAUDE.md) — entry point for Claude Code (deep operating context)

@@ -37,6 +37,14 @@ import { serializePageToMarkdown } from '../markdown.ts';
 import { isSegmentedPage, pageBodyOverCeilingError } from '../page-body/page-shape.ts';
 import { materializedPage, segmentedOverCeiling } from '../persistence/segmented-apply.ts';
 import { preparePageMutation } from '../persistence/page-prepare.ts';
+import { chooseBodyStorage, readPageBodyPolicy } from '../page-body/limits.ts';
+import { PAGE_MAX_BYTES } from '../page-size-policy.ts';
+import { effectiveBytesBlock } from '../import-screen.ts';
+import { EMBED_SKIP_KEY } from '../embed-skip.ts';
+import { assertPreparedFactWithdrawals, preserveWithdrawnFenceRows } from './withdrawal.ts';
+import { prepareSegmentedSpliceMutation } from '../persistence/page-append.ts';
+import type { BodyReplacement, SplicePage } from '../page-body/splice.ts';
+import { refuseRuleFactTarget } from '../rules/admission.ts';
 import type { CompanionPage, PreparedMutation } from '../persistence/coordinator.ts';
 import type { WriteRequest } from '../persistence/model.ts';
 import { normalizeTargetFences } from '../fence-repair/import-step.ts';
@@ -45,8 +53,9 @@ import { assertFenceRewritable } from '../fence-shared.ts';
 import { pageFencesNormalized } from '../fence-repair/report.ts';
 import { withPendingFenceRows } from '../eligibility/fence-overlay.ts';
 import { withPageTierKept } from '../trust/fence-append.ts';
+import { newHoldingPageFrontmatter } from '../trust/page-write.ts';
 import type { TrustTier } from '../trust/tier.ts';
-import { extractFactsFromFenceText } from './extract-from-fence.ts';
+import { extractFactsFromFenceText, pageFactDate } from './extract-from-fence.ts';
 import { isHoldingSlug } from '../facts-fence.ts';
 import { rememberAcceptsPageCreatedSince } from '../persistence/page-identity.ts';
 import { fenceRowOf, withHeldFactsFence, type FenceRowInput } from './unfenced-facts.ts';
@@ -55,9 +64,41 @@ import { carriesClaimSql, claimNeedles } from './purge-verify.ts';
 import { withdrawnFact } from './withdrawal-overlay.ts';
 import { pruneHoldingPageVersions } from '../page-state/versions.ts';
 
+/**
+ * @internal The forced probe of the segmented remember cost test (test/large-pages/remember-cost.test.ts): every fence
+ * append to a segmented page takes the whole-body path, as before #10589.
+ */
+export const fenceAppendProbe = { wholeBody: false };
+
+/**
+ * #10589: the stored-byte replacements that turn each region of a segmented page from its stored text (read back whole)
+ * into its new text, each pair given as [before, after]: one per region that changed, keeping the bytes the two share
+ * at each end. Null when the stored text is not the generation the splice reads (the page moved: the whole-body path refuses it at its revision check).
+ */
+function regionReplacements(page: SplicePage, generation: number | undefined, truth: readonly [string, string],
+  timeline: readonly [string, string]): BodyReplacement[] | null {
+  if (generation !== page.generation) return null;
+  const out: BodyReplacement[] = [];
+  const continuation = (b: Buffer, at: number) => at < b.length && (b[at]! & 0xc0) === 0x80;
+  for (const [from, to, start, bytes] of [[...truth, 0, page.truthBytes], [...timeline, page.truthBytes, page.bodyBytes - page.truthBytes]] as const) {
+    const a = Buffer.from(from, 'utf8'), b = Buffer.from(to, 'utf8');
+    if (a.length !== bytes) return null;
+    if (a.equals(b)) continue;
+    const shared = Math.min(a.length, b.length);
+    let head = 0;
+    while (head < shared && a[head] === b[head]) head++;
+    while (head > 0 && (continuation(a, head) || continuation(b, head))) head--;
+    let tail = 0;
+    while (tail < shared - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+    while (tail > 0 && (continuation(a, a.length - tail) || continuation(b, b.length - tail))) tail--;
+    out.push({ start: start + head, end: start + a.length - tail, bytes: b.subarray(head, b.length - tail) });
+  }
+  return out;
+}
+
 export type FenceFactAppendInput = {
   /** The facts row to publish; `row_num` and `source_markdown_slug` are the helper's. kind and visibility default as insertFacts does. */
-  fact: NewFact & { valid_from: Date };
+  fact: NewFact & { valid_from: Date | null };
   /** The tier the new row's chunks are cut at until its facts row exists (`withPendingFenceRows`); append only. */
   pendingTier: TrustTier;
 } & (
@@ -111,7 +152,8 @@ function fenceCellFor(fact: FenceFactAppendInput['fact'], rowNum: number, slug: 
  * write created first makes this attempt conflict, and the retry appends to it. File before facts row, as an append.
  */
 export async function prepareFenceFactCreate(engine: BrainEngine, row: WriteRequest, config: GBrainConfig,
-  input: { fact: NewFact & { valid_from: Date }; pendingTier: TrustTier; frontmatter: string; heading: string; storedVisibility?: string }, signal?: AbortSignal): Promise<FenceFactAppend> {
+  input: { fact: NewFact & { valid_from: Date | null }; pendingTier: TrustTier; frontmatter: string; heading: string; storedVisibility?: string }, signal?: AbortSignal): Promise<FenceFactAppend> {
+  refuseRuleFactTarget(row.slug, input.fact.entity_slug);
   const page = { sourceId: row.source_id, slug: row.slug };
   const [indexedMax] = await engine.executeRaw<{ n: number }>('SELECT COALESCE(MAX(row_num),0)::int AS n FROM facts WHERE source_id=$1 AND source_markdown_slug=$2', [row.source_id, row.slug]);
   const rowNum = (indexedMax?.n ?? 0) + 1;
@@ -133,6 +175,7 @@ export async function prepareFenceFactCreate(engine: BrainEngine, row: WriteRequ
 export async function prepareFenceFactAppend(engine: BrainEngine, row: WriteRequest, config: GBrainConfig, snapshot: PageSnapshot | null,
   input: FenceFactAppendInput, signal?: AbortSignal): Promise<FenceFactAppend> {
   const { fact } = input;
+  refuseRuleFactTarget(row.slug, fact.entity_slug);
   const page = { sourceId: row.source_id, slug: row.slug };
   if (!snapshot && (!isHoldingSlug(row.slug) || input.mode === 'index-existing')) {
     throw opError('storage_error', 'The facts fence target page does not exist.',
@@ -142,8 +185,10 @@ export async function prepareFenceFactAppend(engine: BrainEngine, row: WriteRequ
   // Wave B: a segmented page is read back whole up to the single-string ceiling.
   if (snapshot && segmentedOverCeiling(snapshot.page)) throw pageBodyOverCeilingError(snapshot.page, `${row.operation} facts fence write`);
   const base = snapshot ? await materializedPage(engine, snapshot.page)
-    : { slug: row.slug, source_id: row.source_id, type: 'note', title: 'Unattributed memory', compiled_truth: '', timeline: '', frontmatter: {} } as unknown as Page;
+    : { slug: row.slug, source_id: row.source_id, type: 'note', title: 'Unattributed memory', compiled_truth: '', timeline: '', frontmatter: newHoldingPageFrontmatter(row) } as unknown as Page;
   const insert = (tx: BrainEngine, rowNum: number, indexed: NewFact) => insertFenceFactRow(tx, row, rowNum, indexed);
+  // #10288: a row with an empty date cell is indexed at the page's fact date, as its projection is.
+  const pageDate = pageFactDate({ slug: row.slug, frontmatter: base.frontmatter, timeZone: await engine.getConfig('brain.timezone') });
 
   if (input.mode === 'index-existing') {
     const { rowNum } = input;
@@ -157,7 +202,7 @@ export async function prepareFenceFactAppend(engine: BrainEngine, row: WriteRequ
         { reason, detail: JSON.stringify({ slug: row.slug, row_num: rowNum, problem: reason }),
           fix: readFix(`Reads ${row.slug} with its current facts fence, read-only.`, { argv: ['gbrain', 'get', '--source', row.source_id, '--', row.slug] }) });
     }
-    const [{ superseded_by_row: _superseded, ...derived }] = extractFactsFromFenceText([cell], row.slug, row.source_id);
+    const [{ superseded_by_row: _superseded, ...derived }] = extractFactsFromFenceText([cell], row.slug, row.source_id, { pageEffectiveDate: pageDate ?? undefined });
     const indexed: NewFact = { ...derived, embedding: fact.embedding ?? null, embedding_model: fact.embedding_model ?? null, source_session: fact.source_session ?? null };
     return { prepared: null, rowNum, fencesNormalized: {}, apply: async tx => ({ id: await insert(tx, rowNum, indexed) }) };
   }
@@ -182,7 +227,39 @@ export async function prepareFenceFactAppend(engine: BrainEngine, row: WriteRequ
   const content = serializePageToMarkdown({ ...base, ...next }, snapshot?.tags ?? []);
   // The canonical parser/chunker and durable filesystem publication; the CAS binds this render to the snapshot.
   // #5575 ENG-1: the new row has no facts row yet; its chunks are cut at the append's tier.
-  const prepared = await withPendingFenceRows({ ...page, rowNums: [rowNum], tier: input.pendingTier },
+  const pending = { ...page, rowNums: [rowNum], tier: input.pendingTier };
+  // #10589: a segmented page publishes the edit as a splice of the segments it touches. The whole-body path re-reads,
+  // re-segments, re-hashes and restages the page, so on a page holding a fence over a segment a save outran its
+  // preparation budget and was lost; it remains for a splice that declines. The spliced regions are the ones that path
+  // stores: trimmed, with rows withdrawn kept struck and purged rows dropped, as its import does.
+  const spliced = snapshot && isSegmentedPage(snapshot.page) && !fenceAppendProbe.wholeBody ? await withPendingFenceRows(pending, async () => {
+    const region = async (text: string) => (await preserveWithdrawnFenceRows(engine, row.source_id, text, row.slug)).trim();
+    const stored = { compiled_truth: await region(next.compiled_truth), timeline: await region(next.timeline) };
+    // The splice skips what only that path's import decides, so it declines where the import would decide otherwise:
+    // household and rule admission, inline storage under the current writer policy, the single-string page ceiling,
+    // and an oversized verdict the stored frontmatter does not already carry.
+    const fm = snapshot.page.frontmatter ?? {};
+    if (snapshot.page.type === 'household' || snapshot.page.type === 'rule' || fm.household_role !== undefined) return null;
+    const bodyBytes = Buffer.byteLength(stored.compiled_truth, 'utf8') + Buffer.byteLength(stored.timeline, 'utf8');
+    if (bodyBytes > PAGE_MAX_BYTES) return null;
+    const policy = await readPageBodyPolicy(engine);
+    if (chooseBodyStorage({ policy, bodyBytes, current: 'segmented', pageKind: 'markdown' }) !== 'segmented') return null;
+    if ((bodyBytes > await effectiveBytesBlock(engine)) !== ((fm[EMBED_SKIP_KEY] as { reason?: unknown } | undefined)?.reason === 'oversized')) return null;
+    const splice = await prepareSegmentedSpliceMutation(engine, row, snapshot, {
+      replacements: async live => {
+        const replacements = regionReplacements(live, snapshot.bodyGeneration, [base.compiled_truth, stored.compiled_truth],
+          [base.timeline ?? '', stored.timeline]);
+        return replacements?.length ? { replacements } : null;
+      },
+      file: frontmatter => serializePageToMarkdown({ ...base, ...stored, frontmatter } as Page, snapshot.tags),
+    });
+    // As the import's validate: a withdrawal committed since preparation that would change a fence row refuses the write.
+    return splice && { ...splice, validate: async (tx: BrainEngine) => {
+      await splice.validate?.(tx);
+      await assertPreparedFactWithdrawals(tx, row.source_id, stored.compiled_truth, stored.timeline, row.slug);
+    } };
+  }) : null;
+  const prepared = spliced ?? await withPendingFenceRows(pending,
     () => preparePageMutation(engine, { ...row, ...(snapshot && rememberAcceptsPageCreatedSince(row, snapshot) ? { page_id: snapshot.page.id } : {}),
       intent: { ...row.intent, content, ...(snapshot ? { expected_revision: snapshot.revision } : {}), force: false } }, config, undefined, signal, { unprojected: true }));
   if (prepared.observedRevision !== (snapshot?.revision ?? null)) {
@@ -193,7 +270,8 @@ export async function prepareFenceFactAppend(engine: BrainEngine, row: WriteRequ
   return { prepared, rowNum, fencesNormalized, apply: async tx => {
     const pageReceipt = await withPageTierKept(tx, page, () => prepared.apply(tx));
     if (snapshot && isHoldingSlug(row.slug) && !isSegmentedPage(snapshot.page)) await pruneHoldingPageVersions(tx, snapshot.page.id);
-    return { id: await insert(tx, rowNum, input.storedVisibility ? { ...fact, visibility: input.storedVisibility as NewFact['visibility'] } : fact), pageReceipt };
+    const indexed = { ...fact, valid_from: fact.valid_from ?? pageDate };
+    return { id: await insert(tx, rowNum, input.storedVisibility ? { ...indexed, visibility: input.storedVisibility as NewFact['visibility'] } : indexed), pageReceipt };
   } };
 }
 

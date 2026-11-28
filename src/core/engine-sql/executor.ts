@@ -39,6 +39,9 @@ import type { SqlFragment } from './fragment.ts';
 
 export type Row = Record<string, unknown>;
 
+/** What a read that master ran as `engine.executeRaw` needs: the raw path alone, so an engine can pass itself (instance wrappers, request abort and retry stay with it). */
+export type RawQuery = Pick<SqlExecutor, 'executeRaw'>;
+
 /** EO18 result envelope. `affectedRows` is 0 when the driver reports no count. */
 export interface ExecResult<R = Row> {
   rows: R[];
@@ -57,8 +60,9 @@ export interface DialectCapabilities {
   /**
    * Upper bound on bind parameters one batched write statement may carry.
    * PGLite's parameter bridge corrupts the session past the signed int16
-   * ceiling (32,767), so PGLite batches below 30,000. Postgres never batched
-   * on master: `Infinity` keeps one statement per write.
+   * ceiling (32,767), so PGLite batches below 30,000. Postgres's wire protocol
+   * counts binds in a uint16 and the driver refuses 65,534 or more
+   * (MAX_PARAMETERS_EXCEEDED), so Postgres batches at 65,533.
    */
   readonly maxBindParamsPerStatement: number;
   /**

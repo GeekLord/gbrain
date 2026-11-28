@@ -24,6 +24,7 @@ import { refuseMember, storeCall, takeOptions, type StoreMember } from './common
 import { storePrivacyPolicy } from './private-provenance.ts';
 import { privateProvenanceFilterUnderPolicy } from '../../search/private-visibility.ts';
 import { withDates } from '../store-codec.ts';
+import { facetOfMetric } from '../../profile/facets.ts';
 
 type Member<K extends keyof BrainEngine> = BrainEngine[K] extends (...args: infer A) => Promise<infer R> ? StoreMember<A, R> : never;
 type FactRow = Awaited<ReturnType<BrainEngine['listFactsByEntity']>>[number];
@@ -49,7 +50,8 @@ const LIST_OPTIONS = ['activeOnly', 'unconsolidatedOnly', 'limit', 'offset', 'ki
  */
 const factPolicy = (member: string, excludePrivate: unknown) =>
   storePrivacyPolicy(member, excludePrivate, () => privateProvenanceFilterUnderPolicy('facts'), { callerReaders: true });
-const RECALL_OPTIONS = [...LIST_OPTIONS, 'entitySlug', 'sourceMarkdownSlug'] as const;
+/** `includeUndated` changes nothing here: the store fills `valid_from` on every insert below, so it holds no undated row (#10288). */
+const RECALL_OPTIONS = [...LIST_OPTIONS, 'entitySlug', 'sourceMarkdownSlug', 'includeUndated'] as const;
 
 /** A string the SQL path binds inside a JSONB document: a lone surrogate becomes U+FFFD. */
 const wellFormed = <T>(s: T): T => (typeof s === 'string' ? ensureWellFormed(s) as T : s);
@@ -258,6 +260,8 @@ export const consolidateFact: Member<'consolidateFact'> = async (brain, id, take
   await storeCall({ member: 'consolidateFact' }, () => brain.consolidateFact(id, takeId));
 };
 
+const TRAJECTORY_NATIVE_PAGE = 500;
+
 export const findTrajectory: Member<'findTrajectory'> = async (brain, opts) => {
   const o = takeOptions('findTrajectory', opts,
     ['entitySlug', 'sourceId', 'sourceIds', 'remote', 'metric', 'kind', 'since', 'until', 'limit', 'excludePrivate']) as unknown as typeof opts;
@@ -266,13 +270,29 @@ export const findTrajectory: Member<'findTrajectory'> = async (brain, opts) => {
     refuseMember('findTrajectory', 'visibility widened by member pages or grants');
   }
   const sourceIds = Array.isArray(o.sourceIds) && o.sourceIds.length > 0 ? [...new Set(o.sourceIds)] : [o.sourceId ?? 'default'];
-  const rows: Row[] = await storeCall({ member: 'findTrajectory' }, () => brain.findTrajectory({
+  const limit = clampSearchLimit(o.limit, 100, 500);
+  const read = (until: string | undefined): Promise<Row[]> => storeCall({ member: 'findTrajectory' }, () => brain.findTrajectory({
     sourceIds, entitySlug: o.entitySlug, worldOnly, metric: o.metric ?? undefined, kind: o.kind ?? 'all',
-    since: o.since ? new Date(o.since).toISOString() : undefined, until: o.until ? new Date(o.until).toISOString() : undefined,
-    limit: clampSearchLimit(o.limit, 100, 500),
+    since: o.since ? new Date(o.since).toISOString() : undefined, until,
+    limit: TRAJECTORY_NATIVE_PAGE,
     excludePrivate: factPolicy('findTrajectory', o.excludePrivate),
   }));
-  return rows.map((row) => withDates(withVector(row), ['valid_from', 'valid_until']) as unknown as TrajectoryPoint);
+  // Lane 3 P1: profile.<facet> claims are never trajectory points (engine-sql/facts.ts filters them in SQL). The native read
+  // has no metric filter and returns the newest rows in date order, so it is paged back in time (until: the oldest row read,
+  // whose ties the next read repeats) until `limit` other rows are found or history ends; the page is the last `limit` of them.
+  const seen = new Set<unknown>();
+  let points: Row[] = [];
+  let until = o.until ? new Date(o.until).toISOString() : undefined;
+  for (let first = true; ; first = false) {
+    const rows = await read(until);
+    const fresh = first ? rows : rows.filter((row) => !seen.has(row.fact_id));
+    for (const row of fresh) seen.add(row.fact_id);
+    points = [...fresh.filter((row) => facetOfMetric(row.metric as string | null) === null), ...points];
+    if (rows.length < TRAJECTORY_NATIVE_PAGE || points.length >= limit || fresh.length === 0) break;
+    until = String(rows[0]!.valid_from);
+  }
+  return points.slice(Math.max(0, points.length - limit))
+    .map((row) => withDates(withVector(row), ['valid_from', 'valid_until']) as unknown as TrajectoryPoint);
 };
 
 export const getFactsHealth: Member<'getFactsHealth'> = (brain, sourceId) =>

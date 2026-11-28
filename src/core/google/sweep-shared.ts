@@ -28,6 +28,11 @@ import type { GoogleSourceConfig, GoogleSourceState } from './types.ts';
 import type { LoopsExclusionPolicy } from './loops-exclusion.ts';
 
 /** The "my addresses" identity set: account + Gmail sendAs aliases. */
+import type { PrivateSenders } from './ingest-tiers.ts';
+import { CredentialError } from '../creds/errors.ts';
+import { jsonbSafeJson, truncateUtf8 } from '../text-safe.ts';
+import { CONNECTOR_AUTHOR_PREFIX } from '../persistence/content-author-schema.ts';
+
 export function myAddressSet(entry: CredentialEntry): Set<string> {
   const out = new Set<string>();
   if (entry.meta.account) out.add(entry.meta.account.toLowerCase());
@@ -56,6 +61,36 @@ export interface GoogleSyncSummary {
   /** #5012: reply-owed loops the detector withheld this sweep, by reason (counts only). */
   loopsWithheld: Record<string, number>;
   failedFiles: number;
+  /** GST-3452: the sweep stopped at a provider usage or rate limit; the run still ends partial. */
+  limitStopped?: boolean;
+  /** GST-3452: items that failed on that limit (each also counted in failedFiles). */
+  limitedItems?: number;
+  /** Why the run ended partial, one line each (every run-level cause, up to ITEM_CAUSE_LIMIT item failures), so the stored job result names the cause. */
+  partialCauses?: string[];
+  partialItemCauses?: number;
+  /** Threads per ingest tier, when the source sorts threads into tiers (ingest-tiers.ts). */
+  ingestTiers?: Record<string, number>;
+}
+
+/** GST-3452: a provider usage or rate limit (gbrain.io's allowance, Google's quota); the next sync resumes. */
+export const isUsageLimit = (e: unknown): boolean => e instanceof CredentialError && (e.code === 'gbrainio_limit_reached' || e.code === 'rate_limited');
+
+const ITEM_CAUSE_LIMIT = 5;
+
+/**
+ * Ends the run partial and records why. A repeated cause is kept once. A failed thread or item (`item`) is
+ * kept only while fewer than five are; a run-level cause (a failed service sweep, a guard refusal, a missing
+ * scope, an abort, a usage limit) is always kept, so item failures never crowd it out. Each cause is safe to
+ * store in the JSONB job result.
+ */
+export function markPartial(summary: GoogleSyncSummary, cause: string, item = false): void {
+  summary.status = 'partial';
+  const line = jsonbSafeJson(truncateUtf8(cause.split('\n')[0]!, 200));
+  const causes = summary.partialCauses ??= [];
+  const items = summary.partialItemCauses ?? 0;
+  if (causes.includes(line) || (item && items >= ITEM_CAUSE_LIMIT)) return;
+  causes.push(line);
+  if (item) summary.partialItemCauses = items + 1;
 }
 
 export interface GoogleSyncDeps {
@@ -65,6 +100,8 @@ export interface GoogleSyncDeps {
   cfg: GoogleSourceConfig;
   opts: SyncOpts;
   entry: CredentialEntry;
+  /** #10094: who the owner is in reply-owed loop detection only: myAddressSet(entry) plus loops.owner_addresses, read once per sync. Ingest tiers, grace holds and paid extraction (sweep and catch-up) keep myAddressSet(entry). */
+  myAddresses: Set<string>;
   log: (msg: string) => void;
   /**
    * #5349: one forward-progress note per imported item. The progress-aware
@@ -82,6 +119,10 @@ export interface GoogleSyncDeps {
   loopState?: GoogleSourceState;
   processedThreads: Set<string>;
   graceBackfillSeeded?: boolean;
+  /** The source's private-senders list, loaded once per run before any write (ingest-tiers.ts). */
+  privateSenders?: PrivateSenders | null;
+  /** #9389: rewrite each fetched Gmail body through gmail-redact.ts before anything reads it (`google.gmail.redact_credentials`). */
+  redactCredentials?: boolean;
 }
 
 export type ActivePack = { page_types: ReadonlyArray<{ name: string; path_prefixes: ReadonlyArray<string> }> } | undefined;
@@ -189,6 +230,7 @@ export async function importRendered(
       noEmbed: true, // embeds handled by the size gate below, like sync
       sourceId: deps.sourceId,
       ...(activePack ? { activePack } : {}),
+      content_author: `${CONNECTOR_AUTHOR_PREFIX}google`,
     };
     const result = databaseOnly
       ? await importFromContent(deps.engine, slug, markdown, { ...opts, sourcePath: relPath, preserveGateMarkers: true, holdNoncanonicalPrivate: true })

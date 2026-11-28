@@ -33,7 +33,7 @@
  *     for child-spawn resolution (verified on 1.3.10 — a `process.env.PATH`
  *     mutation is invisible to execFileSync lookup), so the recorder shims
  *     would never intercept `bun install`. Instead each fixture clone gets an
- *     UNTRACKED `src/cli.ts` driver that imports the real repo's runUpgrade —
+ *     UNTRACKED `src/upgrade-driver.ts` that imports the real repo's runUpgrade —
  *     the honest bun-link shape (argv[1] lives inside the checkout, so
  *     detection resolves the clone with no patching) — and the test spawns it
  *     with the shim dir already first on PATH.
@@ -105,7 +105,7 @@ interface Fixture extends BaseFixture {
   origin: string;          // local bare origin; its PATH carries the detection marker
   clone: string;           // the "bun-linked" source clone, one commit behind origin
   ahead: string;           // working copy that pushes to origin
-  driver: string;          // untracked <clone>/src/cli.ts — the bun-link entry point
+  driver: string;          // untracked <clone>/src/upgrade-driver.ts; <clone>/src/cli.ts is the recorder the checks run
   originHead: string;      // commit B (ahead)
   cloneHeadBefore: string; // commit A
 }
@@ -202,8 +202,21 @@ function buildFixture(label: string, aheadFloor = '>=1.4.0'): Fixture {
   // bun-link install: argv[1] lives inside the checkout, so detectBunLink
   // resolves THIS clone with no argv patching. The tripwire exits 3 before
   // any git/bun child if detection ever names a root outside this clone.
-  const driver = join(clone, 'src', 'cli.ts');
+  const driver = join(clone, 'src', 'upgrade-driver.ts');
   mkdirSync(join(clone, 'src'), { recursive: true });
+  // #10536: the checks after the swap run the checkout's own src/cli.ts with the running Bun, not a gbrain on PATH, so
+  // the entry is the same recorder as the PATH shim.
+  writeFileSync(
+    join(clone, 'src', 'cli.ts'),
+    [
+      "import { appendFileSync } from 'node:fs';",
+      'const args = process.argv.slice(2);',
+      'appendFileSync(' + JSON.stringify(base.argvLog) + ", 'gbrain ' + args.join(' ') + '\\n');",
+      `if (args[0] === '--version') console.log('gbrain ${SHIM_NEW_VERSION}');`,
+      "if (args[0] === '--help' && process.env.GBRAIN_TEST_HELP_EXIT) { console.error('GBrain requires Bun 1.4.0 or newer (found Bun 1.3.14).'); process.exit(Number(process.env.GBRAIN_TEST_HELP_EXIT)); }",
+      '',
+    ].join('\n'),
+  );
   writeFileSync(
     driver,
     [
@@ -250,6 +263,9 @@ async function spawnWithShims(
     GIT_TERMINAL_PROMPT: '0',
     NO_COLOR: '1',
     TERM: 'dumb',
+    // GST-3604: the restart preflight reads each serve's systemd unit from its cgroup; a cgroup with no unit keeps a
+    // runner's own unit (runner-script.service) out of the recorder.
+    GBRAIN_TEST_UPGRADE_CGROUP: '0::/\n',
     ...extraEnv,
   };
   if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
@@ -276,6 +292,36 @@ async function spawnWithShims(
     clearTimeout(hardKill);
   }
 }
+
+/**
+ * A long-running `gbrain serve --http` of another brain on this host, as a concurrent test on a CI runner leaves one:
+ * the restart preflight looks up the systemd unit of every serve in `ps` before it filters by brain.
+ */
+async function withHostServe<T>(run: () => Promise<T>): Promise<T> {
+  const otherHome = mkdtempSync(join(tmpdir(), 'gbrain-bunlink-otherbrain-'));
+  cleanupDirs.push(otherHome);
+  const proc = Bun.spawn(['bash', '-c', 'exec -a "gbrain serve --http" sleep 300'], {
+    env: { HOME: otherHome, GBRAIN_HOME: otherHome, PATH: process.env.PATH ?? '' },
+    stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+  });
+  const shown = () => { try { return execFileSync('ps', ['-p', String(proc.pid), '-o', 'command='], { encoding: 'utf-8' }); } catch { return ''; } };
+  for (let i = 0; i < 100 && !shown().includes('gbrain serve --http'); i++) await Bun.sleep(50);
+  try {
+    expect(shown()).toContain('gbrain serve --http');
+    return await run();
+  } finally {
+    try { proc.kill('SIGKILL'); } catch { /* gone */ }
+  }
+}
+
+const ARC_CALLS = (head: string) => [
+  `bun install ::head=${head}`,
+  'gbrain --version',
+  'gbrain --help',
+  'gbrain post-upgrade',
+  'gbrain features',
+  'gbrain upgrade --restart-only',
+];
 
 function assertExit0(label: string, r: SpawnResult): void {
   if (r.code !== 0) {
@@ -337,7 +383,7 @@ describe('runUpgrade — bun-link arc (real git vs local bare origin; bun/gbrain
     writeFileSync(join(fx.home, '.gbrain', 'last-update-check'), 'stale\n');
     writeFileSync(join(fx.home, '.gbrain', 'update-snoozed'), 'stale\n');
 
-    const run = await spawnWithShims(fx, [fx.driver]);
+    const run = await withHostServe(() => spawnWithShims(fx, [fx.driver]));
     assertExit0('upgrade driver (full arc)', run);
     expect(run.out).toContain('Detected install method: bun-link');
     expect(run.out).toContain(`Upgrading bun-link source clone at ${fx.clone}...`);
@@ -350,14 +396,7 @@ describe('runUpgrade — bun-link arc (real git vs local bare origin; bun/gbrain
 
     // Recorder sequence: the bun shim saw the POST-pull HEAD (pull ran first),
     // then verify → post-upgrade → features → the new build's restart (GBRA-175), in order, and nothing else.
-    expect(argvLines(fx)).toEqual([
-      `bun install ::head=${fx.originHead}`,
-      'gbrain --version',
-      'gbrain --help',
-      'gbrain post-upgrade',
-      'gbrain features',
-      'gbrain upgrade --restart-only',
-    ]);
+    expect(argvLines(fx)).toEqual(ARC_CALLS(fx.originHead));
 
     // saveUpgradeState checkpoint: $HOME/.gbrain/upgrade-state.json.
     const state = JSON.parse(readFileSync(join(fx.home, '.gbrain', 'upgrade-state.json'), 'utf-8'));
@@ -368,6 +407,18 @@ describe('runUpgrade — bun-link arc (real git vs local bare origin; bun/gbrain
     expect(readFileSync(join(fx.home, '.gbrain', 'just-upgraded-from'), 'utf-8').trim()).toBe(VERSION);
     expect(existsSync(join(fx.home, '.gbrain', 'last-update-check'))).toBe(false);
     expect(existsSync(join(fx.home, '.gbrain', 'update-snoozed'))).toBe(false);
+  }, 120_000);
+
+  test('GST-3604 probe: with a serve on the host, a cgroup naming a systemd unit reaches the recorder (the runner failure)', async () => {
+    const fx = buildFixture('cgroup-probe');
+    const run = await withHostServe(() => spawnWithShims(fx, [fx.driver], { GBRAIN_TEST_UPGRADE_CGROUP: '0::/system.slice/runner-script.service\n' }));
+    assertExit0('upgrade driver (runner cgroup)', run);
+    // One lookup per serve on the host: other serves of this uid (a pooled test's, a developer's) add identical lines.
+    const lines = argvLines(fx);
+    const lookups = lines.filter(l => l.startsWith('systemctl'));
+    expect(lookups.length).toBeGreaterThan(0);
+    expect(lookups.every(l => l === 'systemctl show -p MainPID --value -- runner-script.service')).toBe(true);
+    expect(lines).toEqual([...lookups, ...ARC_CALLS(fx.originHead)]);
   }, 120_000);
 
   test('--swap-only: swap + verify + breadcrumb, but NO post-upgrade and NO features child', async () => {

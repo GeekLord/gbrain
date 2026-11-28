@@ -11,8 +11,23 @@
  */
 /** Forwarded members that only read but are not open to remote callers. */
 export const OWNER_IPC_LOCAL_ONLY_READS: ReadonlySet<string> = new Set([
+  // The import path's source, resolver, guest, privacy-label and writer-state reads: SELECTs only.
+  'listLocalPathSources', 'listSourceRoutingRows', 'countDefaultSourceSplit', 'listSourceRecords', 'listActiveSourceConfigs', 'readSourceIncarnation', 'hasCompanyBrainReceipt', 'readGuestSourceRow', 'ownsSchemaTables', 'readIgnoredPrivacyLabelPages', 'readLivePageFrontmatter', 'readWriterAdminState', 'readSourceRow',
+  // Typed reads that land ahead of their callers (Rust engine landing parts), as main classes them.
+  'readPageOrigin', 'readPageIndexingState', 'readWriteVisibilityProbe', 'listSlugAliases', 'readPageTrustRows', 'readOwnerOnlySourcesPresent', 'readOwnerOnlySourceConfig', 'readSourceRow', 'readSourceIncarnation', 'hasCompanyBrainReceipt', 'listGuestSourceIds', 'readWriterAdminState', 'readWorktreeManifest', 'readReflexLiveKeys', 'readReflexPages', 'readStoredConfigValue', 'readSegmentedEmbedPage', 'hasUnsealedPages', 'readPageEmbeddingBudget', 'readEmbeddingCompletion', 'readLinkContextMatches', 'readLinkContextOriginPages', 'readRowTrustRows', 'listHeldFenceCells', 'readFenceOverlayRows', 'readLiveStoredBody', 'countFactFingerprintLeftovers', 'loadPurgeTarget', 'listDerivedRows', 'listRequestsHoldingStagings', 'countPurgeProbe', 'listPurgeProbeItems', 'listPageGitEffectsForStrip', 'listPageChangeReasons', 'listRequestsRecordingReasons', 'listSegmentedPageBodies', 'listSegmentedVersionBodies', 'probePurgeDerivations', 'listBeliefEventsForPurgeProbe', 'listFactContextsForPurgeProbe', 'listPageSourcePathsForPurge', 'listNearestFactsForPurge', 'countLegacyDerivedPages', 'listPageProseHits', 'readPurgeReceiptSourcePath', 'countPagePurgeTombstones', 'readDeletePageRequest', 'listPurgeEffects', 'countPurgeFingerprintResidue', 'countPurgeVersionsCarryingClaim', 'countPurgeReviewRows', 'listPurgeStreamSlugs', 'findPurgeBlockedPublication', 'listSegmentedVersionsForPurge', 'listPurgedPageRevisions', 'listFactProvenance', 'listSlotRows', 'isFactPurged', 'readSourcePurgeFlags', 'listPurgedTakeRows', 'listWriteGateReceiptsFor', 'listWriteGateHoldRows', 'getWriteGateHoldRow', 'getTrustProposal', 'listTrustProposals', 'listLiveChunksByIds', 'listLiveTakesByIds', 'readWriterSlugFence', 'readOwnedLinks', 'readLinkTargetPages', 'readJournalLimitRows', 'readSourcePurgeEpoch', 'hasPersistenceTable', 'listManagedRootBindings', 'readWriteRequest', 'readWriteRequestsByRequestIds', 'readWriteRequestById', 'readOAuthClientWriteGrant', 'readAccessTokenWriteGrant', 'readCounterRows', 'readAdmissionRate', 'readOwnerHostBinding', 'readSourceMembership', 'findTopologyChanges', 'readNotifierStatusRows', 'hasNotifierCoverage', 'readRequestEffects', 'readCapacityForecastInputs', 'readSegmentedGateEvidence', 'readChunkKeepState', 'hasDrainableProjectionJob', 'readChunkRowsFingerprint', 'listStaleChunkVectors', 'countPendingTextChunks', 'readProjectionHead', 'isDeferredReplacementHeld', 'readLiveMember', 'readFolderAccess', 'readMayActFor', 'readAudiencePrincipals', 'readAccessMembers', 'readLinkedMember', 'readOauthClient', 'readScopeSourceConfigs', 'readLivePageIdBySlug', 'findTakeId', 'getLatestCalibrationProfile', 'listCorePageRows', 'listTrustScanRows', 'countUnscannedTrustRows', 'readTrustScanCursor', 'listClaimPendingSourceIds', 'readTrustScanCeilings', 'readBeliefHistoryRows', 'listVisibleBeliefLifetimes', 'readOpenBeliefLifetimes', 'readBeliefStateRows', 'readBeliefFactsById', 'hasBeliefEvents', 'listPageRefsByIds', 'listPageTrustTiersByKey', 'lockLivePagesByKey', 'listValidTimeIdentities', 'pickValidTimeEdition', 'listAmendmentsNotApplied', 'readPageVersionEdition', 'readCursorEdition', 'pageAwaitsRederive',
   'readStoredBodyBytes', 'readPageBodySizes', 'readFieldUsageSamples', 'listFiles', 'getCodeTraversalCache',
   'listSegmentedPages', 'hasWithdrawnFenceClaim',
+  // N3: the alias, export, body-manifest, trust-tier, withdrawal-discovery, belief-coverage, search-vector and queue-health reads:
+  // SELECTs only. They stay closed to remote callers, as the decide reads below do.
+  'readEntityAliasRows', 'readPageAliasRows', 'readPageTitle', 'resolveCaseSensitiveAliases',
+  'listAccessPolicySourceIds', 'listExportPageKeys', 'listExportWithdrawals', 'listForcedCutSeqs', 'normalizeFenceLines',
+  'readBodyManifestMeta', 'readBodyManifestOutline', 'readBodyManifestRows', 'readExportPageRows', 'readExportWithdrawalLedgerBytes',
+  'readSegmentedPageHead', 'readSegmentedVersionBodyBytes', 'listPageTypesByIds', 'listVersionReasonWriters', 'listVersionTrustTiers',
+  'readWithdrawalDiscovery', 'listCoveredSources', 'countSearchVectorRows',
+  'readQueueHealthSignals', 'listPrivateQueueHealth', 'listQueueWedgeCounts', 'listStuckActiveJobsByName', 'listWaitingByQueue',
+  'readOldestWaitingAge', 'readQueueDivergence', 'readWedgeSignals',
+  // The core-edit notice read (engine-sql/trust-tier-reads.ts): a SELECT only, closed to remote callers like the other trust-tier reads.
+  'listPendingCoreEditNotices',
   // The decide store: SELECTs only (getDecideProposal and getDecideReviewProposal may lock the row, released when
   // the call ends).
   'readDecideState', 'dailyDecideSpend', 'listDecideSpendBySlot', 'listDecideReceiptStats', 'decideSlotUsage',
@@ -20,6 +35,15 @@ export const OWNER_IPC_LOCAL_ONLY_READS: ReadonlySet<string> = new Set([
   'listDecideCalibrations', 'getDecideCalibration', 'getDecideProposal', 'listDecideProposalIds', 'listDecideProposals',
   'listDecideProposedPairs', 'listDecideReviewProposals', 'getDecideReviewProposal', 'listDecideReviewProposalIds',
   'readProposalReviewRates', 'listDueDecideReviewQueue', 'listDueDecideSweepDeferred',
+  // The open-loop, timeline, source-state, proposal and access reads of the write-side members (engine-sql/open-loops.ts,
+  // timeline-reads.ts, write-misc.ts): SELECTs only (readSourceState may take a share lock, released when the call ends).
+  'countSegmentedTimelinePages', 'countTimelineCommentMarkupRows', 'getWorktreeBinding', 'hasExtractedEvents',
+  'hasLabelledOnlyMember', 'listAccessTokens', 'listActiveAccessMembers', 'listAwaitingMemoryProposals',
+  'listMemoryProposalRows', 'listOpenLoops', 'countOpenLoopsByCounterpartyEmail', 'listOwnerProposalRows', 'listSharedSkillPackRoots',
+  'listStoredTimelineRowsOrdered', 'listSynopsisSourceIds', 'listTimelineOrphanPages',
+  'readAdmissionSource', 'readEntityOpenLoops', 'readHealthMemoClock', 'readMaxTimelineEntryId',
+  'readMemoryProposal', 'readOpCheckpointKeys', 'readPendingProposalSummary', 'readSourceState',
+  'sampleEffectiveDateSources', 'sampleEffectiveDates', 'sharedSkillPackTablePresent', 'storedTimelineRowsByPageIds',
 ]);
 
 const page = 'getPage for that slug and source';
@@ -34,6 +58,89 @@ const decideKey = 'readDecideState for that key';
 const calibration = 'getDecideCalibration for that id';
 
 export const OWNER_IPC_CONFIRMING_READS: Readonly<Record<string, string>> = {
+  markSourceSynced: 'getSource for that source id',
+  beginSnapshotRead: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  declarePersistence: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  requireSynchronousCommit: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  sealImportedPage: 'getPage for that slug and source',
+  lockSourceRow: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  deleteOpCheckpoint: 'readOpCheckpointKeys for that operation',
+  worktreeClaimStore: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  writerAdminStore: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  addPersistenceCounters: 'readCounterRows',
+  publicationJournalStore: 'a SELECT of the rows the call writes',
+  storeSegmentDerivationsIfLive: 'readSegmentDerivations for that page (the rows are there only when the page was live at that generation)',
+  deleteRewrittenSegmentDerivations: 'readSegmentDerivations for that page',
+  recordPageEmbeddingHold: 'readPageEmbeddingBudget for that page',
+  openPageEmbeddingHold: 'readPageEmbeddingBudget for that page',
+  reservePageEmbedding: 'readPageEmbeddingBudget for that page',
+  settlePageEmbeddingReservation: 'readPageEmbeddingBudget for that page',
+  lockEffectClaimRow: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  lockEmbeddingSwitch: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  installChunkEmbeddings: 'getChunksWithEmbeddings for that page',
+  insertFactPurge: 'listPurgeEffects for that purge',
+  insertTakePurge: 'probePurgeDerivations for that purge',
+  upsertPagePurges: 'nothing: the write is an upsert keyed by its source and content hash, so running it again repeats no write',
+  setPurgeProbeTimeout: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  vacuumPurgedTables: 'nothing: a vacuum only rewrites storage, so running it again repeats no write',
+  setPurgeVersionBody: 'getVersions for that slug',
+  redactVersionChangeReasons: 'getVersions for that slug',
+  abortPurgedStagings: 'probePurgeDerivations for that purge',
+  deletePurgedStagingParts: 'probePurgeDerivations for that purge',
+  deletePageViewDigests: 'probePurgeDerivations for that purge',
+  deleteUnreferencedPurgedTexts: 'probePurgeDerivations for that purge',
+  insertHoldingPagePurges: 'probePurgeDerivations for that purge',
+  deletePurgeReviewQueue: 'probePurgeDerivations for that purge',
+  deletePurgeReviewProposals: 'probePurgeDerivations for that purge',
+  deletePurgeDecideProposals: 'probePurgeDerivations for that purge',
+  deletePurgeTakeProposals: 'probePurgeDerivations for that purge',
+  insertPurgeEffects: 'listPurgeEffects for that purge',
+  expireDerivedFacts: 'listFactsByEntity for that fact\'s entity',
+  deactivateDerivedTakes: 'listTakes for that page',
+  softDeleteDerivedPages: 'getPage for that slug and source',
+  markNeedsRederive: 'pageAwaitsRederive for that page',
+  insertFactWithdrawal: 'listExportWithdrawals for that source',
+  upsertWriteGateReceipt: 'listWriteGateReceiptsFor that page',
+  upsertPageWriteGateReceipt: 'listWriteGateReceiptsFor that page',
+  upsertWriteGateHold: 'getWriteGateHoldRow for that hold',
+  insertTrustProposal: 'getTrustProposal for that id',
+  setWriteContext: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  setEffectTransactionLimits: 'nothing: the setting lasts only for the call, so running it again repeats no write',
+  deleteOwnedLinks: 'readOwnedLinks for that source',
+  rearmLinksEffects: 'readRequestEffects for that request',
+  shareLockWriteCredential: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  lockPersistenceCounters: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  insertWriteRequest: 'readWriteRequest for that request',
+  stampWriteClaim: 'readWriteRequest for that request',
+  lockWriteRequest: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  completeWriteRow: 'readWriteRequest for that request',
+  lockWriteRequestsById: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  compactTerminalIntent: 'readWriteRequest for that request',
+  insertPublicationEffects: 'readRequestEffects for that request',
+  renewWriteClaim: 'readWriteRequest for that request',
+  releaseUnpublishedClaim: 'readWriteRequest for that request',
+  renewEffectClaim: 'readRequestEffects for that request',
+  completeEffectRow: 'readRequestEffects for that request',
+  failEffectRow: 'readRequestEffects for that request',
+  lockEffectGuard: 'nothing: the lock is released when the call ends, so running it again repeats no write',
+  deleteProjectionJob: 'hasDrainableProjectionJob',
+  clearUnkeptChunkVectors: 'readChunkKeepState',
+  setProjectionChunkerVersion: 'readProjectionHead',
+  queuePageProjectionJob: 'readProjectionHead',
+  deleteUnkeptChunks: 'readChunkKeepState',
+  clearChunkVectors: 'listStaleChunkVectors',
+  renewDeferredReplacementClaim: 'isDeferredReplacementHeld',
+  releaseDeferredReplacementClaim: 'isDeferredReplacementHeld',
+  takePageEmbeddingLease: 'readPageEmbeddingBudget for that page',
+  renewPageEmbeddingLease: 'readPageEmbeddingBudget for that page',
+  releasePageEmbeddingLease: 'readPageEmbeddingBudget for that page',
+  insertCalibrationProfile: 'getLatestCalibrationProfile for that source',
+  purgeCalibrationProfilesByWave: 'getLatestCalibrationProfile for that source',
+  writeTrustScanCursor: 'readTrustScanCursor',
+  insertBeliefEvents: 'readBeliefStateRows',
+  markBeliefCommits: 'readBeliefStateRows',
+  endBeliefLifetime: 'readOpenBeliefLifetimes',
+  bumpSourcePurgeEpoch: 'readSourcePurgeEpoch',
   executeRaw: 'a SELECT of the rows the statement changes', executeRawDirect: 'a SELECT of the rows the statement changes',
   runMigration: 'the brain schema version (gbrain doctor --json)', initSchema: 'the brain schema version (gbrain doctor --json)',
   ownerOnlyMarkTriggers: 'the trigger state in gbrain doctor --json',
@@ -97,6 +204,12 @@ export const OWNER_IPC_CONFIRMING_READS: Readonly<Record<string, string>> = {
   transitionDecideReviewProposal: 'getDecideReviewProposal for that id',
   applyDecideReviewQueue: 'listDueDecideReviewQueue for that kind and source',
   applyDecideSweepDeferred: 'listDueDecideSweepDeferred for that source',
+  // The write-side members (engine-sql/open-loops.ts, timeline-reads.ts, write-misc.ts).
+  upsertOpenLoop: 'listOpenLoops for that loop\'s source', closeOpenLoop: 'listOpenLoops for that loop\'s source',
+  deleteTimelineRows: 'storedTimelineRowsByPageIds for the pages the call named', attachSourcePath: 'readSourceState for that source',
+  expireMemoryProposals: 'listMemoryProposalRows for that source', purgeMemoryProposals: 'listMemoryProposalRows for that source',
+  // The applied-capture purge (engine-sql/op-checkpoint.ts).
+  purgeStaleAppliedCaptures: 'nothing: a purge removes only records past the retention, so running it again removes nothing more',
 };
 
 /**
@@ -108,6 +221,8 @@ export const OWNER_IPC_WHOLE_OP_CONFIRMING_READS: Readonly<Record<string, string
   importFromFile: 'getPage for the slug of that file',
   importImageFile: 'getPage for the slug of that file',
   importManagedFiles: 'getPage for each slug the call named',
+  snapshotStore: 'nothing: a snapshot writes only a new directory, so the brain is as it was; ask snapshotStatus for the operation id',
+  snapshotStatus: 'nothing: it only reads what the owner remembers',
 };
 
 /**

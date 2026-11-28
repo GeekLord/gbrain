@@ -20,7 +20,7 @@
  * Resolution: stdio GBRAIN_SURFACE > --surface flag > config `mcp_surface` >
  * 'full' (resolveStdioSurface); `serve --http` ignores GBRAIN_SURFACE. Why
  * default full: a bare `serve` keeps existing advanced tooling, and the
- * registrations gbrain writes pin `REGISTRATION_SURFACE`
+ * registrations gbrain writes pin their harness's `registrationProfile`
  * (src/core/mcp-registration.ts) unless the user passes `--surface`.
  *
  * WP4 (D2 CEILING): on the OAuth HTTP transport the server-resolved surface is
@@ -41,6 +41,7 @@ import { opError } from '../core/ops/contract.ts';
 import { BRAIN_TOOL_ALLOWLIST } from '../core/minions/tools/brain-tool-allowlist.ts';
 import { flagValues } from '../core/direct-pool-profile.ts';
 import { SUBMIT_AGENT_DEFAULT_MAX_TURNS } from '../core/ops/jobs.ts';
+import { sessionWidenOff } from '../core/mcp-registration.ts';
 
 export type McpSurface = 'verbs' | 'starter' | 'full';
 
@@ -112,6 +113,10 @@ export const STARTER_OPS: ReadonlySet<string> = new Set([
   'mute_notice',
   // GBRA-219: the per-conversation memory switch rides next to remember.
   'memory_conversation_mode',
+  // Agent platform H1: "what's at risk at home" is a daily-driver read (a direct literal, so subagents gain nothing).
+  'household_due',
+  // Agent platform C2: the user's correction saves a standing rule and fixes the fact (a direct literal, so subagents gain nothing).
+  'correct',
 ]);
 
 /**
@@ -158,7 +163,7 @@ export function parseSurfaceFlag(args: string[]): McpSurface | null {
 
 /**
  * `--advertise`: the surface tools/list shows, narrower than what is callable.
- * Registrations gbrain writes pass `--advertise verbs` (REGISTRATION_ADVERTISE);
+ * Registrations gbrain writes on the starter profile pass `--advertise verbs` (STARTER_PROFILE);
  * absent, `mcp.advertised_surface` decides.
  */
 export function parseAdvertiseFlag(args: string[]): McpSurface | null {
@@ -168,7 +173,7 @@ export function parseAdvertiseFlag(args: string[]): McpSurface | null {
   const raw = inline !== undefined ? inline.slice('--advertise='.length) : args[idx + 1];
   if (raw === undefined || raw.startsWith('--') || !isMcpSurface(raw)) {
     throw opError('invalid_params', `gbrain serve --advertise takes verbs, starter or full${raw === undefined || raw.startsWith('--') ? '' : ` (got "${raw}")`}`,
-      'Run gbrain serve --advertise verbs (list the 7 memory verbs and request_tools), gbrain serve --advertise starter or gbrain serve --advertise full. Every tool the surface allows stays callable.');
+      'Run gbrain serve --advertise verbs (list the 7 memory verbs, correct and request_tools), gbrain serve --advertise starter or gbrain serve --advertise full. Every tool the surface allows stays callable.');
   }
   return raw;
 }
@@ -279,16 +284,20 @@ export const STARTER_CALLABLE_PARAMS: Readonly<Record<string, Readonly<Record<st
     grammar_diagnostics: 'The line-grammar findings for the page being read; put_page and capture receipts on starter point at it.',
   },
   edit_page: { within: 'Narrows an edit to the byte range a get_page window hands back as edit_target.' },
+  correct: { resume: 'A stopped correction\'s receipt names correct {receipt_id, resume: true} as its next call; it finishes only the uncommitted steps of a receipt this caller made.' },
   put_page: { drop_timeline: 'Confirms a timeline removal the starter schema already allows by omitting the section; put_page\'s own refusal names it.' },
   remember: {
     visibility: 'Already accepted per item in items, which starter lists; the segmented-entity refusal and the connection check pass it.',
     infer_entity: 'false only turns entity inference off; the segmented-entity refusal\'s retry names it.',
     valid_from: 'Already accepted per item in items; it only dates the fact being written, to the same source under the same grant, and reads nothing.',
+    facet: 'The brain-ops skill and docs/guides/profile.md name it; it only labels a fact for the caller\'s own profile, and the profile checks refuse any other page.',
+    content_origin: 'gbrain profile import labels each imported fact inferred; a starter caller may pass only inferred or tool_output (STARTER_PARAM_VALUES), which only lower a write\'s trust tier, and an inferred write never supersedes a user_said fact.',
   },
   recall: {
     grep: 'A substring filter that only narrows the facts returned; gbrain\'s connection check passes it.',
     limit: 'Caps rows per arm at 100; gbrain\'s connection check passes it.',
     source_ids: NARROW,
+    max_chars: 'Only cuts the reply to whole facts and results within the cap, so a client with a response size limit can bound it; it reads nothing more.',
   },
   list_pages: {
     source_ids: NARROW, slug_prefix: LIST_FILTER, where: LIST_FILTER,
@@ -303,7 +312,10 @@ export const STARTER_CALLABLE_PARAMS: Readonly<Record<string, Readonly<Record<st
     allowed_slug_prefixes: 'Only narrows the grant\'s delegated write fence: a prefix outside delegated_slug_prefixes, or any override of a job namespace, is refused.',
   },
   entity: { source_id: THIN_SOURCE, prefer_source_id: THIN_SOURCE },
-  context_pack: { source_id: THIN_SOURCE, prefer_source_id: THIN_SOURCE },
+  context_pack: {
+    source_id: THIN_SOURCE, prefer_source_id: THIN_SOURCE,
+    profile: 'The brain-ops skill names it and gbrain profile on a thin client sends it; it adds only the caller\'s own profile, read at the caller\'s scope.',
+  },
   list_skills: { schema_version: SKILL, cursor: SKILL, source_id: SKILL },
   get_skill: { schema_version: SKILL, qualified_id: SKILL, expected_brain_id: SKILL, source_incarnation: SKILL, pack_id: SKILL, revision: SKILL },
   get_skill_asset: { source_incarnation: SKILL, pack_id: SKILL, qualified_id: SKILL, expected_brain_id: SKILL },
@@ -334,6 +346,33 @@ export function itemParamKeys(op: OperationMeta, params: Record<string, unknown>
 export const STARTER_PARAM_CEILINGS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   submit_agent: { max_turns: SUBMIT_AGENT_DEFAULT_MAX_TURNS },
 };
+
+/** The only values a narrower surface accepts for a reviewed hidden parameter: starter callers may label a remember lower, never user_said. */
+export const STARTER_PARAM_VALUES: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  remember: { content_origin: ['inferred', 'tool_output'] },
+};
+
+/**
+ * The first parameter value in `params` (top level, then remember's items) outside the values `surface` accepts for a
+ * parameter it hides (STARTER_PARAM_VALUES), or undefined. Only a value the parameter's own enum accepts counts: anything
+ * else is left to parameter validation, which never echoes it, and a refusal here can quote the value it names.
+ */
+export function paramValueOffSurface(op: OperationMeta, params: Record<string, unknown>, surface: McpSurface): { param: string; value: unknown; allowed: readonly string[]; inItem: boolean } | undefined {
+  const values = STARTER_PARAM_VALUES[op.name];
+  if (surface === 'full' || !values) return undefined;
+  const listed = filterOpsForSurface([op], surface)[0];
+  const field = ITEM_PARAMS[op.name];
+  const items = field && Array.isArray(params[field]) ? (params[field] as unknown[]).filter((i): i is Record<string, unknown> => !!i && typeof i === 'object') : [];
+  for (const [param, allowed] of Object.entries(values)) {
+    if (listed?.params[param] !== undefined) continue;
+    const declared = (op.params[param] as { enum?: unknown[] } | undefined)?.enum ?? [];
+    for (const [where, inItem] of [[params, false], ...items.map(i => [i, true] as const)] as const) {
+      const value = where[param];
+      if (typeof value === 'string' && declared.includes(value) && !allowed.includes(value)) return { param, value, allowed, inItem };
+    }
+  }
+  return undefined;
+}
 
 /** The ceiling a surface puts on a parameter it hides, or undefined when it puts none. */
 export function paramCeiling(op: OperationMeta, param: string, surface: McpSurface): number | undefined {
@@ -486,15 +525,19 @@ export async function clientAdvertisedSurface(
 }
 
 /**
- * The tools to list: the callable set narrowed to the advertised surface
- * (never wider). A narrowed list always keeps request_tools when it is
- * callable: it is how an agent reaches the unlisted tools (the verbs surface
- * itself has none).
+ * Tools a narrowed list always keeps when they are callable. request_tools is
+ * how an agent reaches the unlisted tools; correct (GST-4058) is the only tool
+ * for a user's standing rule, and agents that never saw it fell back to
+ * remember plus forget. The verbs surface itself lists neither: it stays the
+ * seven frozen verbs.
  */
+const ALWAYS_LISTED: ReadonlySet<string> = new Set(['request_tools', 'correct']);
+
+/** The tools to list: the callable set narrowed to the advertised surface (never wider), plus ALWAYS_LISTED. */
 export function advertisedOps<T extends OperationMeta>(callable: T[], callableSurface: McpSurface, advertised: McpSurface | null): T[] {
   if (!advertised || !surfaceWiderThan(callableSurface, advertised)) return callable;
   const listed = new Set(filterOpsForSurface(callable, advertised).map(op => op.name));
-  return callable.filter(op => listed.has(op.name) || op.name === 'request_tools');
+  return callable.filter(op => listed.has(op.name) || ALWAYS_LISTED.has(op.name));
 }
 
 /**
@@ -506,7 +549,7 @@ export function advertisedOps<T extends OperationMeta>(callable: T[], callableSu
  */
 export function stdioToolListing(advertised: () => Promise<McpSurface | null>, session: { readonly surface: McpSurface },
   server: { sendToolListChanged(): Promise<void> }) {
-  const revealed = new Set<string>();
+  const revealed = new Set<string>(), served = new Set<string>();
   const startSurface = session.surface;
   const notify = () => { Promise.resolve(server.sendToolListChanged()).catch(() => { /* best-effort */ }); };
   return {
@@ -520,6 +563,15 @@ export function stdioToolListing(advertised: () => Promise<McpSurface | null>, s
     async isListed(op: OperationMeta): Promise<boolean> {
       if (session.surface !== startSurface || revealed.has(op.name)) return true;
       return advertisedOps([op], session.surface, await advertised()).length > 0;
+    },
+    /** Records the names the latest tools/list answer served (the list the client last read). */
+    noteServed(names: string[]): void {
+      served.clear();
+      for (const name of names) served.add(name);
+    },
+    /** Whether the latest tools/list answer served this tool. */
+    servedToClient(name: string): boolean {
+      return served.has(name);
     },
     reveal(names: string[]): void {
       const before = revealed.size;
@@ -565,6 +617,8 @@ export function effectiveSurfaceForClient(opts: {
  */
 export interface StdioSurfaceState {
   surface: McpSurface;
+  /** The surface the session started at (its registration); `surface` moves on a widen, this never does. */
+  readonly registered: McpSurface;
   readonly source: SurfaceSource;
   readonly readOnly: boolean;
   /** `mcp.allow_session_widen` as last resolved (boot, then each request_tools call). */
@@ -585,6 +639,7 @@ export function createStdioSurfaceState(
   };
   const state: StdioSurfaceState = {
     source: init.source,
+    registered: init.surface,
     readOnly: init.readOnly,
     widenAllowed: true,
     ...compute(init.surface),
@@ -602,12 +657,11 @@ export function createStdioSurfaceState(
 
 /** `mcp.allow_session_widen` (default true): DB plane, then the file plane (file only when `engine` is null). */
 export async function sessionWidenAllowed(engine: BrainEngine | null, config: GBrainConfig | null | undefined): Promise<boolean> {
-  const off = (v: unknown) => v === false || (typeof v === 'string' && /^(false|0|off|no)$/i.test(v.trim()));
   try {
     const dbVal = engine ? await engine.getConfig('mcp.allow_session_widen') : null;
-    if (dbVal != null) return !off(dbVal);
+    if (dbVal != null) return !sessionWidenOff(dbVal);
   } catch { /* the file plane decides */ }
-  return !off(config?.mcp?.allow_session_widen);
+  return !sessionWidenOff(config?.mcp?.allow_session_widen);
 }
 
 /** The once-per-process `surface_env_invalid` info notice for an ignored GBRAIN_SURFACE value. */

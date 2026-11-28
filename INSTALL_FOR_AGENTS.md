@@ -179,7 +179,8 @@ whenever the user gives one. Capture
 them. A coded refusal (`setup_owner_conflict`, `setup_hosted_connection`) means
 another owner or a hosted brain holds the target; follow its `fix`.
 When the brain will answer several people (a team bot, a shared channel), ask the
-user who they are and add `--serves several --members <id,...>`: each gets a member,
+user who they are and add `--members <id,...>` (claude-code and codex; for another
+harness, preview `gbrain access serves several --members <id,...>`, then apply it with `--yes`): each gets a member,
 a folder `people/<member>/` only they read and a bound key
 (`~/.gbrain/member-keys/<member>.key`; relay paths, never keys). On
 `setup_serves_several`, rerun with its fix. Add `--stdio-member <member>`
@@ -398,6 +399,10 @@ spend. Confirm before continuing.
 
 ## Step 4: Import and Index
 
+A brain `gbrain setup claude-code` or `codex` created offers the coding sessions already on the machine as the
+`setup_history` decision: relay it, and run its `import` argv only on the user's yes; the newest session comes first
+and the last 30 days need a second yes ([setup history import](docs/guides/conversation-archive.md#setup-history-import)).
+
 Optional, when the user has chosen files to import. Keyword retrieval stays
 local; embedding and expanded query calls require separate provider consent.
 
@@ -598,7 +603,7 @@ not register Hermes's MCP server, run the command in
 brain-first rule:
 
 ```bash
-openclaw mcp add gbrain --command "$(command -v gbrain)" --arg serve --arg --surface --arg starter --arg --advertise --arg verbs --env GBRAIN_HOME=$HOME
+openclaw mcp add gbrain --command "$(command -v gbrain)" --arg serve --arg --surface --arg full --env GBRAIN_HOME=$HOME
 gbrain setup openclaw
 ```
 

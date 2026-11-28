@@ -85,6 +85,7 @@ import { commitFactFenceFile, gitPathState } from './fence-write.ts';
 import { isOwnedClone } from '../url-clone.ts';
 import { parseSourceConfig } from '../sources-load.ts';
 import { isSourceDbOnlySlug } from '../persistence/source-storage.ts';
+import { isRuleSlug } from '../rules/record.ts';
 
 export interface UnfencedFactRow {
   id: string;
@@ -95,7 +96,7 @@ export interface UnfencedFactRow {
   visibility: 'private' | 'world';
   notability: 'high' | 'medium' | 'low';
   context: string | null;
-  valid_from: Date;
+  valid_from: Date | null;
   valid_until: Date | null;
   source: string;
   confidence: number;
@@ -119,6 +120,8 @@ export interface UnfencedFactsOutcome {
   skipped_url_clone: number;
   /** Unmanaged (#7098): rows of a read-only mirror source (`gbrain sources mirror-readonly`), kept database-only for the same reason. */
   skipped_mirror_read_only: number;
+  /** GST-4027: rows whose entity is a standing rule page stay unfenced; only the rules owner edits that page. */
+  skipped_rule_page: number;
   pages_touched: number;
   /** `<slug> (<reason>)` per page whose fence write failed; its rows stay unfenced. */
   failed_pages: string[];
@@ -181,7 +184,8 @@ export type FenceRowInput = Pick<UnfencedFactRow, 'kind' | 'visibility' | 'conte
  * attributed_to) render only when present.
  */
 export function fenceRowOf(row: FenceRowInput, rowNum: number, claim: string): ParsedFact {
-  const validFromStr = formatFenceDate(row.valid_from instanceof Date ? row.valid_from : new Date(row.valid_from));
+  const validFromStr = row.valid_from == null ? undefined
+    : formatFenceDate(row.valid_from instanceof Date ? row.valid_from : new Date(row.valid_from));
   const validUntilStr = row.valid_until
     ? formatFenceDate(row.valid_until instanceof Date ? row.valid_until : new Date(row.valid_until))
     : undefined;
@@ -300,32 +304,47 @@ export async function planUnfencedFacts(engine: BrainEngine, opts: { sourceId?: 
   const mirrors = new Set(managed ? [] : sources.filter(s => parseSourceConfig(s.config).mirror_read_only === true).map(s => s.id));
   const localPathById = new Map(sources.map(s => [s.id, s.local_path] as const));
   const archived = new Set(sources.filter(s => s.archived).map(s => s.id));
-  const rows = await engine.executeRaw<UnfencedFactRow>(
-    `SELECT id, source_id, entity_slug, fact, kind, visibility, notability,
-            context, valid_from, valid_until, source, confidence,
-            claim_metric, claim_value, claim_unit, claim_period, attributed_to,
-            EXISTS (SELECT 1 FROM pages p WHERE p.source_id = f.source_id
-              AND p.slug = f.entity_slug AND p.deleted_at IS NULL) AS page_exists
-       FROM facts f
-      WHERE row_num IS NULL AND expired_at IS NULL AND dimension IS NULL
-        ${opts.sourceId !== undefined ? 'AND source_id = $1' : ''}
-      ORDER BY source_id, entity_slug, id`,
+  const outcome: UnfencedFactsOutcome = {
+    scanned: 0, fenced: 0, skipped_no_entity: 0, skipped_no_local_path: 0, skipped_no_page: 0,
+    skipped_archived: 0, skipped_url_clone: 0, skipped_mirror_read_only: 0, skipped_rule_page: 0, pages_touched: 0, failed_pages: [], write_errors: 0, fenced_slugs: [], missing_files: [], unbound_refused: [], unadoptable_rows: [],
+  };
+  // #10005: every serve's maintenance sweep runs this, so the rows that can never be fenced here (no entity, no live
+  // page, a skipped source) are counted on the server and only the fenceable ones are transferred.
+  const unfenced = `row_num IS NULL AND expired_at IS NULL AND dimension IS NULL${opts.sourceId !== undefined ? ' AND source_id = $1' : ''}`;
+  const pageLive = 'EXISTS (SELECT 1 FROM pages p WHERE p.source_id = f.source_id AND p.slug = f.entity_slug AND p.deleted_at IS NULL)';
+  const counts = await engine.executeRaw<{ source_id: string; has_entity: boolean; page_exists: boolean; n: number | string }>(
+    `SELECT source_id, has_entity, page_exists, COUNT(*) AS n
+       FROM (SELECT f.source_id, f.entity_slug IS NOT NULL AS has_entity, ${pageLive} AS page_exists FROM facts f WHERE ${unfenced}) c
+      GROUP BY source_id, has_entity, page_exists`,
     opts.sourceId !== undefined ? [opts.sourceId] : [],
   );
-  const outcome: UnfencedFactsOutcome = {
-    scanned: rows.length, fenced: 0, skipped_no_entity: 0, skipped_no_local_path: 0, skipped_no_page: 0,
-    skipped_archived: 0, skipped_url_clone: 0, skipped_mirror_read_only: 0, pages_touched: 0, failed_pages: [], write_errors: 0, fenced_slugs: [], missing_files: [], unbound_refused: [], unadoptable_rows: [],
-  };
-  const groups = new Map<string, UnfencedFactRow[]>();
-  for (const row of rows) {
-    if (row.entity_slug === null) { outcome.skipped_no_entity += 1; continue; }
+  const fenceableSources = new Set<string>();
+  for (const count of counts) {
+    const n = Number(count.n);
+    outcome.scanned += n;
+    if (!count.has_entity) { outcome.skipped_no_entity += n; continue; }
     // A managed brain publishes through the source's maintenance authority,
     // which an archived source does not grant; it never blocks the others.
-    if (managed && archived.has(row.source_id)) { outcome.skipped_archived += 1; continue; }
-    if (mirrors.has(row.source_id)) { outcome.skipped_mirror_read_only += 1; continue; }
-    if (urlClones.has(row.source_id)) { outcome.skipped_url_clone += 1; continue; }
-    if (!localPathById.get(row.source_id) && !managed) { outcome.skipped_no_local_path += 1; continue; }
-    if (!row.page_exists) { outcome.skipped_no_page += 1; continue; }
+    if (managed && archived.has(count.source_id)) { outcome.skipped_archived += n; continue; }
+    if (mirrors.has(count.source_id)) { outcome.skipped_mirror_read_only += n; continue; }
+    if (urlClones.has(count.source_id)) { outcome.skipped_url_clone += n; continue; }
+    if (!localPathById.get(count.source_id) && !managed) { outcome.skipped_no_local_path += n; continue; }
+    if (!count.page_exists) { outcome.skipped_no_page += n; continue; }
+    fenceableSources.add(count.source_id);
+  }
+  const rows = fenceableSources.size === 0 ? [] : await engine.executeRaw<UnfencedFactRow>(
+    `SELECT id, source_id, entity_slug, fact, kind, visibility, notability,
+            context, valid_from, valid_until, source, confidence,
+            claim_metric, claim_value, claim_unit, claim_period, attributed_to, TRUE AS page_exists
+       FROM facts f
+      WHERE row_num IS NULL AND expired_at IS NULL AND dimension IS NULL
+        AND source_id = ANY($1::text[]) AND entity_slug IS NOT NULL AND ${pageLive}
+      ORDER BY source_id, entity_slug, id`,
+    [[...fenceableSources]],
+  );
+  const groups = new Map<string, UnfencedFactRow[]>();
+  for (const row of rows) {
+    if (isRuleSlug(row.entity_slug)) { outcome.skipped_rule_page += 1; continue; }
     const key = `${row.source_id}\0${row.entity_slug}`;
     groups.set(key, [...groups.get(key) ?? [], row]);
   }

@@ -13,6 +13,7 @@ import { autopilotLockPath } from '../src/core/autopilot-paths.ts';
 import { killProcessGroup } from '../src/core/minions/job-isolation.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
 import { withEnv } from './helpers/with-env.ts';
+import { withQueueMembers } from './helpers/queue-engine-members.ts';
 
 async function isolated(fn: (root: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'gbrain-blocked-owner-'));
@@ -197,8 +198,10 @@ process.exit(1);`);
     const supervisorModule = pathToFileURL(join(import.meta.dir, '../src/core/minions/child-worker-supervisor.ts')).href;
     const workerPidFile = join(root, 'worker.pid');
     const worker = join(root, 'worker.ts');
-    writeFileSync(worker, `import {writeFileSync} from 'node:fs';
-writeFileSync(${JSON.stringify(workerPidFile)},String(process.pid));
+    // Written aside and renamed into place: the poll below sees no file or the whole pid, never the empty file writeFileSync creates before it writes.
+    writeFileSync(worker, `import {renameSync,writeFileSync} from 'node:fs';
+writeFileSync(${JSON.stringify(`${workerPidFile}.tmp`)},String(process.pid));
+renameSync(${JSON.stringify(`${workerPidFile}.tmp`)},${JSON.stringify(workerPidFile)});
 setInterval(()=>{},1000);`);
     const ownerScript = join(root, 'owner.ts');
     writeFileSync(ownerScript, `import {OwnerProcessingState} from ${JSON.stringify(statusModule)};
@@ -336,9 +339,13 @@ catch(error){appendFileSync(${JSON.stringify(join(root, 'publication-failures'))
     const state = new OwnerProcessingState('supervisor', 'fixture');
     const reporter = pathToFileURL(join(import.meta.dir, '../src/commands/jobs-readiness.ts')).href;
     const worker = join(root, 'late-ready.ts');
+    // The handler is armed before the reporter module loads, so a timeout signal that lands while a loaded runner is still
+    // loading it is handled once the load finishes. The kill grace is the production one: the worker exits from its handler,
+    // so a passing run never waits on it.
     writeFileSync(worker, `import {writeFileSync} from 'node:fs';
-import {reportWorkerReady} from ${JSON.stringify(reporter)};
-process.on('SIGTERM',()=>{
+const reporter=import(${JSON.stringify(reporter)});
+process.on('SIGTERM',async()=>{
+ const {reportWorkerReady}=await reporter;
  try {reportWorkerReady();writeFileSync(${JSON.stringify(join(root, 'late-admission'))},'unexpected');}
  catch(error){writeFileSync(${JSON.stringify(join(root, 'late-refusal'))},String(error));}
  process.exit(1);
@@ -347,7 +354,7 @@ setInterval(()=>{},1000);`);
     let timeouts = 0;
     const sup = new ChildWorkerSupervisor({
       cliPath: process.execPath, args: [worker], processingState: state,
-      maxCrashes: 1, hardStopMaxCrashes: 1, _startupReadyTimeoutMs: 1000, _startupKillGraceMs: 1000,
+      maxCrashes: 1, hardStopMaxCrashes: 1, _startupReadyTimeoutMs: 1000,
       isStopping: () => false, onMaxCrashesExceeded: () => {},
       onEvent: event => { if (event.kind === 'worker_startup_timeout') timeouts++; },
     });
@@ -583,10 +590,10 @@ ${kind === 'supervisor'
     const state = new OwnerProcessingState('supervisor', 'fixture');
     let rejectHealth!: (error: Error) => void;
     let reconnects = 0;
-    const engine = {
+    const engine = withQueueMembers({
       executeRaw: () => new Promise((_r, reject) => { rejectHealth = reject; }),
       reconnect: async () => { reconnects++; },
-    } as unknown as BrainEngine;
+    }) as unknown as BrainEngine;
     const supervisor = new MinionSupervisor(engine, { cliPath: process.execPath, pidFile: join(root, 'owner.pid') });
     Object.assign(supervisor, { processingState: state, consecutiveHealthFailures: 2 });
     writeWorkerProcessingStatus({ state: 'ready' }, state.prepareChild());

@@ -83,9 +83,9 @@ worker enforces it:
 |---|---|---|---|
 | `book-mirror` | one `subagent` per chapter | `authorized`, one group | the approved total, shared by the chapters |
 | `enrich --background` (Postgres) | one `enrich` per source | `authorized`, one group | the approved total, shared by the sources |
-| `jobs submit enrich\|subagent` | one | `authorized` | the approved cap |
+| `jobs submit enrich\|subagent\|embed\|embed-backfill\|embed-catch-up` | one | `authorized` | the approved cap (embedding jobs record it only when you set the cap yourself, and stop at the first refusal; a backfill also keeps its own `embed.backfill_max_usd` cap, and the lower one stops it) |
 | jobs of those commands queued before submit-time authorization | as above | `legacy_default`, one group per job | `enrich`: the job's `--max-usd`, else $5; `subagent`: $5 |
-| everything else (`agent run`, MCP `submit_agent`/`submit_job`, `doctor --remediate`, autopilot and dream phases, `skillopt`, `import`, `reindex`, `sync`, embedding backfills) | various | none (`unrecorded`) | the producer's own budget: client daily budget, cycle budget, embedding caps, write-path embedding as configured, `--max-usd` for remediation |
+| everything else (`agent run`, MCP `submit_agent`/`submit_job`, `doctor --remediate`, autopilot and dream phases, `skillopt`, `import`, `reindex`, `sync`, automatically queued embedding backfills) | various | none (`unrecorded`) | the producer's own budget: client daily budget, cycle budget, embedding caps, write-path embedding as configured, `--max-usd` for remediation |
 
 Each provider attempt reserves its maximum cost against the group in the
 durable spend meter and settles its measured usage; an attempt that never
@@ -149,9 +149,11 @@ line naming the cap, its source and how to remove it, e.g.
 | `reindex --markdown` consent gate | — | — | TTY prompt / non-TTY exit 3; a queued job needs the approval stored at submit | `--dry-run`, `--no-embed` | derived cap |
 | `migrate embeddings` consent gate | — (plan + estimate before provider migration) | — | TTY y/N prompt / non-TTY refuse + exit 3 (`confirmation_required`) | `--yes` | estimate marked informational, but **still prompts** (guards a destructive schema rebuild, not just spend) |
 | `enrich` | `--max-usd` (per-call) | — | non-TTY without `--yes`/`--max-usd`: refuse + exit 3 (`confirmation_required`); `--yes` runs under the derived cap | `--max-usd off` | runs uncapped (still ledgered) |
+| Dream `enrich_thin` per-run caps | `cycle.enrich_thin.max_total_cost_usd` / `cycle.enrich_thin.max_cost_usd` / `cycle.enrich_thin.max_pages_per_tick` | `0.50` per run / `1.00` per source / `3` pages per source (about $0.01 a page). The phase runs only after `gbrain config set cycle.enrich_thin.enabled true` | stops the run at the cap | `gbrain config set cycle.enrich_thin.enabled false` | **not** consulted |
+| Dream `enrich_thin` daily caps | `cycle.enrich_thin.max_daily_cost_usd` / `cycle.enrich_thin.max_daily_pages` | unset (no daily cap) | stops the phase for the rest of the owner's day (`brain.timezone`, UTC when unset), counted across every run that day, on top of the per-tick caps (`max_cost_usd`, `max_total_cost_usd`, `max_pages_per_tick`) | `gbrain config set cycle.enrich_thin.enabled false` (`0` on a cap = no enrich that day; a value that is not a number skips the phase with `daily_cap_invalid` until fixed) | **not** consulted |
 | `onboard --auto` | `--max-usd` (per-call) | — | refuses without `--max-usd` (exit 2); manual-only steps (pack upgrade, takes bootstrap) never run, their commands are printed | `--max-usd off` | runs uncapped (still ledgered) |
 | Image-OCR per-run ceiling | `embedding_image_ocr_max_images` / `embedding_image_ocr_max_usd` | `200` images / `$1.00` (estimated) | skips OCR over-cap (import continues; skips counted in `ocr_skipped_budget`, surfaced by doctor `ocr_health`) | `0` disables that cap | **not** bypassed (per-run cap, not a tracker gate) |
-| Dream `extract_atoms` phase budget | `cycle.extract_atoms.budget_usd` | `0.30` | caps the phase's budget tracker (one tracker per drain attempt, across all its batches) | — | **not** consulted (phase budget enforces regardless) |
+| Dream `extract_atoms` phase budget | `cycle.extract_atoms.budget_usd` | `0.30` | caps the phase's budget tracker (one tracker per drain attempt, across all its batches) | `0` = spend nothing | **not** consulted (phase budget enforces regardless) |
 | Atom auto-drain daily cap | `autopilot.auto_drain.max_usd_per_day` | `2.00` | daily cap on drain **attempts** (`floor(max / 0.30)` = 6), not a dollar ledger | `gbrain config set autopilot.auto_drain.enabled false` | **not** consulted |
 | Connector email/meeting atoms | `cycle.extract_atoms.connector_pages` | on (unset) | Gmail/Calendar `email`/`meeting` pages are extracted like other pages, under the auto-drain cap | `false` | **not** consulted |
 | Life Chronicle event extraction | `chronicle.job_budget_usd` (per page) / `chronicle.auto_daily_limit` (calls per rolling 24 h) | `0.25` / `200` | caps one extraction call; past the daily limit pending pages wait for a free slot | `gbrain config set auto_chronicle false` | **not** consulted |
@@ -323,6 +325,23 @@ stay; opting out only stops new extraction. A page longer than that cap is read
 once up to the cap: its head atoms are kept, the phase reports it under
 `input_truncated` with a stderr line, and the page is not marked complete; it
 is skipped (not re-spent) until you raise the cap or the page changes.
+
+To keep a whole source out of atom extraction (a retrieval-only mirror, or a
+source whose owner has not agreed to send its text to a model), turn it off
+per source. Its pages stay synced, indexed and searchable; nothing from it, page
+or transcript, is sent to the model for atoms; the routine cycle, `gbrain dream
+--drain` and the auto-drain skip it; and `gbrain doctor`'s
+`extract_atoms_backlog` counts its pages apart (`policy_excluded`) instead of
+asking you to drain them:
+
+```bash
+gbrain sources set-extract-atoms <id> off --dry-run   # preview; prints the apply command
+gbrain sources set-extract-atoms <id> off --expect on # apply
+gbrain sources set-extract-atoms <id> on              # include it again
+```
+
+Inside an included source, a single page stays out with `extract_atoms: false`
+in its frontmatter.
 
 ### Life Chronicle: automatic event extraction
 
@@ -501,6 +520,9 @@ Semantics:
   into the config directly.
 - Overrides win over shipped tables — you own your bill (negotiated rates,
   markup-charging proxies).
+- The `get_usage` chat ledger uses those overrides too. Allow up to one minute
+  for a running process to pick up a price change. Existing rows aren't
+  repriced, and a call with no price still has no USD estimate.
 - Models with neither a table row nor an override stay fail-closed under a cap.
 - Invalid entries (negative, non-numeric) are dropped; those models keep the
   fail-closed behavior.
@@ -533,6 +555,23 @@ a negative), the operator clearly intended a cap, so the $10 default applies
 and is NEVER dropped — even for unpriced models — with a stderr warning
 naming both fixes (correct the value, or set it to `off` to remove the
 ceiling). A typo must not silently degrade to uncapped spend.
+
+### How a capped embedding run counts each request
+
+Under any dollar cap (`--max-usd`, `embed.backfill_max_usd`, the
+maintenance daily cap, an approved job), every request to the embedding
+provider is admitted on its own before it is sent. It holds the most input
+the request can bill: one token per UTF-8 byte of its text, capped per input
+by the model's input limit. Character counts are not used, because dense text
+such as Chinese or Vietnamese bills several times more tokens than its
+character count suggests. The hold settles to the tokens the provider
+reports. When the provider reports no usage, or the request failed in a way
+that may still have billed, the full hold stays charged. A request the SDK
+would split into several is sent as separate requests, each admitted on its
+own, and the SDK's hidden retries are off; gbrain's own rate-limit retries
+admit each attempt again. A run can therefore stop a little before the cap,
+with the spend it kept charged shown as estimated in the ledger. Uncapped
+runs are unchanged.
 
 ## Escape hatches at a glance
 

@@ -65,10 +65,15 @@ export interface ClaimConflictRun {
   warnings: string[];
 }
 
-/** dream.claim_conflicts.mode: propose files proposals each cycle; off (the default, and any other stored value) skips the phase. */
+/**
+ * dream.claim_conflicts.mode: propose (the default when unset: keyless, it writes only proposal rows) files proposals each
+ * cycle; off, any other stored value, and a config read that fails skip the phase.
+ */
 export async function claimConflictsMode(engine: Pick<BrainEngine, 'getConfig'>): Promise<'propose' | 'off'> {
-  const raw = (await engine.getConfig(CLAIM_CONFLICTS_MODE_KEY).catch(() => null))?.trim().toLowerCase();
-  return raw === 'propose' ? 'propose' : 'off';
+  let raw: string | null;
+  try { raw = await engine.getConfig(CLAIM_CONFLICTS_MODE_KEY); } catch { return 'off'; }
+  if (raw == null) return 'propose';
+  return raw.trim().toLowerCase() === 'propose' ? 'propose' : 'off';
 }
 
 /** Why value is not a valid dream.claim_conflicts.mode, or null when it is. */
@@ -78,7 +83,7 @@ export function claimConflictsModeRefusal(value: string): string | null {
 }
 
 const ACTIVE_CLAIMS = 'WITH f AS (\n'
-  + '  SELECT id, entity_slug, visibility, claim_metric, claim_value, claim_unit, claim_period, valid_from, source_markdown_slug, ' + claimBucketSql('facts') + ' AS bucket\n'
+  + '  SELECT id, entity_slug, visibility, claim_metric, claim_value, claim_unit, claim_period, COALESCE(valid_from, created_at) AS at, source_markdown_slug, ' + claimBucketSql('facts') + ' AS bucket\n'
   + '    FROM facts\n'
   + '   WHERE source_id = $1 AND expired_at IS NULL AND (valid_until IS NULL OR valid_until > now())\n'
   + '     AND entity_slug IS NOT NULL AND claim_metric IS NOT NULL AND claim_value IS NOT NULL AND source <> ALL($2::text[]))';
@@ -87,7 +92,7 @@ const PAIR_JOIN = 'FROM f n JOIN f o\n'
   + '   AND o.claim_unit IS NOT DISTINCT FROM n.claim_unit AND o.claim_period IS NOT DISTINCT FROM n.claim_period\n'
   + '   AND o.bucket = n.bucket AND o.claim_value <> n.claim_value\n'
   + '   AND (NOT (' + onOwnedMemoryPageSql('n') + ' OR ' + onOwnedMemoryPageSql('o') + ') OR o.source_markdown_slug = n.source_markdown_slug)\n'
-  + '   AND (o.valid_from < n.valid_from OR (o.valid_from = n.valid_from AND o.id < n.id))\n'
+  + '   AND (o.at < n.at OR (o.at = n.at AND o.id < n.id))\n'
   + ' WHERE NOT EXISTS (SELECT 1 FROM decide_proposals p WHERE p.source_id = $1\n'
   + '         AND LEAST(p.new_fact_id, p.old_fact_id) = LEAST(n.id, o.id) AND GREATEST(p.new_fact_id, p.old_fact_id) = GREATEST(n.id, o.id))\n'
   + '   AND NOT EXISTS (SELECT 1 FROM trust_proposals tp WHERE tp.status = \'pending\' AND tp.action = \'supersede_fact\'\n'
@@ -155,11 +160,11 @@ export async function runClaimConflicts(engine: BrainEngine, opts: { sourceIds?:
     warnings: knob.warning ? [knob.warning] : [] };
 }
 
-/** Cycle adapter: off by default (dream.claim_conflicts.mode); maps the run onto the cycle's PhaseResult (duration filled by the caller). */
+/** Cycle adapter: on by default, off with dream.claim_conflicts.mode off; maps the run onto the cycle's PhaseResult (duration filled by the caller). */
 export async function claimConflictsCyclePhase(engine: BrainEngine | null, dryRun: boolean): Promise<PhaseResult> {
   if (!engine) return { phase: 'claim_conflicts', status: 'skipped', duration_ms: 0, summary: 'no database connected', details: { reason: 'no_database' } };
   if (await claimConflictsMode(engine) === 'off') {
-    return { phase: 'claim_conflicts', status: 'skipped', duration_ms: 0, summary: 'mode off (' + CLAIM_CONFLICTS_MODE_KEY + ', default off)', details: { reason: 'mode_off' } };
+    return { phase: 'claim_conflicts', status: 'skipped', duration_ms: 0, summary: 'mode off (' + CLAIM_CONFLICTS_MODE_KEY + ' off; unset means propose)', details: { reason: 'mode_off' } };
   }
   const r = await runClaimConflicts(engine, { dryRun });
   const status: PhaseResult['status'] = r.status === 'complete' ? 'ok' : r.status === 'partial' ? 'warn' : r.status === 'failed' ? 'fail' : 'skipped';

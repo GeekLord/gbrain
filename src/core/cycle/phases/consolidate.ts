@@ -131,7 +131,7 @@ export const DEFAULT_CLUSTER_THRESHOLD = 0.85;
  * valid_until is already correct.
  */
 async function writeValidUntilChain(tx: BrainEngine, cluster: FactRow[]): Promise<void> {
-  const chronological = [...cluster].sort((a, b) => {
+  const chronological = cluster.filter((f): f is FactRow & { valid_from: Date } => f.valid_from !== null).sort((a, b) => {
     const t = a.valid_from.getTime() - b.valid_from.getTime();
     if (t !== 0) return t;
     return a.id - b.id;
@@ -272,10 +272,8 @@ export async function runPhaseConsolidate(
       }
 
       // Age gate: oldest must be at least minOldestAgeMs old.
-      const oldest = unconsolidated.reduce((min, f) =>
-        f.valid_from.getTime() < min.valid_from.getTime() ? f : min,
-      );
-      if (Date.now() - oldest.valid_from.getTime() < minOldestAgeMs) {
+      const oldest = Math.min(...unconsolidated.map(f => (f.valid_from ?? f.created_at).getTime()));
+      if (Date.now() - oldest < minOldestAgeMs) {
         bucketsSkipped += 1;
         continue;
       }
@@ -317,7 +315,7 @@ export async function runPhaseConsolidate(
         const avgWeight = cluster.reduce((s, f) => s + f.confidence, 0) / cluster.length;
         const sources = Array.from(new Set(cluster.map(c => c.source_session ?? c.source).filter(Boolean))).join(',');
         const sinceISO = cluster
-          .map(c => c.valid_from)
+          .map(c => c.valid_from ?? c.created_at)
           .reduce((min, d) => (d < min ? d : min))
           .toISOString()
           .slice(0, 10);
@@ -390,7 +388,7 @@ export async function runPhaseConsolidate(
         // Write gate on a new take: reject skips the cluster; hold records it for review and leaves the facts unconsolidated.
         const takeRow = { page_id: pageId, row_num: nextRowNum, claim: best.fact, kind: 'fact', holder: 'self', weight: clamp01(avgWeight),
           since_date: sinceISO, source: sources.slice(0, 200), active: true };
-        const gate = existing.length ? null : await gateNewTake(engine, derivation, takeRow, { sourceId: b.source_id, slug: b.entity_slug },
+        const gate = existing.length ? null : await gateNewTake(engine, derivation, takeRow, { sourceId: b.source_id, slug: b.entity_slug, pageId },
           gateConfig ??= (await loadImportSanityConfig(engine)).writeGate ?? DEFAULT_WRITE_GATE_CONFIG);
         if (gate && gate.action !== 'insert') { if (gate.action === 'hold') clustersGateHeld++; else clustersGateRejected++; continue; }
         const written = await derivedMaintenanceTransaction<{ created: boolean; takeId: number | null } | null>(engine, derivation, async tx => {
@@ -480,7 +478,7 @@ export async function runPhaseConsolidate(
  * inserts on `insert` (recording a flag receipt) and skips otherwise.
  */
 async function gateNewTake(engine: BrainEngine, derivation: { trust: WriteTrust; inputs: readonly TaintInput[] },
-  takeRow: { claim: string; source: string } & Record<string, unknown>, at: { sourceId: string; slug: string }, cfg: WriteGateConfig): Promise<GatedRowDecision> {
+  takeRow: { claim: string; source: string } & Record<string, unknown>, at: { sourceId: string; slug: string; pageId?: number }, cfg: WriteGateConfig): Promise<GatedRowDecision> {
   const gate = decideTakeWrite({ claim: takeRow.claim, source: takeRow.source }, { ...at, payload: takeRow,
     input: { tier: derivation.trust.tier, origin: derivation.trust.origin, requestId: null }, cfg });
   if (gate.action === 'hold') await derivedMaintenanceTransaction(engine, derivation, async tx => ({ result: await recordWriteGateHold(tx, gate.hold!), rows: [] }));
@@ -501,8 +499,8 @@ export interface SameInstantCluster {
 const SAME_INSTANT_SAMPLES = 20;
 
 function clusterTie(cluster: FactRow[], claims: Map<number, ClaimShape>): SameInstantTie | undefined {
-  return sameInstantTies(cluster.map(f => ({ id: f.id, at: f.valid_from.getTime(), metric: claims.get(f.id)?.metric ?? null,
-    unit: claims.get(f.id)?.unit ?? null, period: claims.get(f.id)?.period ?? null })))[0];
+  return sameInstantTies(cluster.flatMap(f => f.valid_from ? [{ id: f.id, at: f.valid_from.getTime(), metric: claims.get(f.id)?.metric ?? null,
+    unit: claims.get(f.id)?.unit ?? null, period: claims.get(f.id)?.period ?? null }] : []))[0];
 }
 
 /**
@@ -616,7 +614,7 @@ export function untypedClusterThreshold(threshold: number): number {
  * pipeline ensures embeddings are computed at insertFact time.
  */
 export function clusterFacts(facts: FactRow[], threshold: number, claims: Map<number, ClaimShape> = new Map()): FactRow[][] {
-  const sorted = [...facts].sort((a, b) => b.valid_from.getTime() - a.valid_from.getTime());
+  const sorted = [...facts].sort((a, b) => (b.valid_from ?? b.created_at).getTime() - (a.valid_from ?? a.created_at).getTime());
   const clusters: FactRow[][] = [];
   for (const f of sorted) {
     if (!f.embedding || !f.embedding_model || f.embedded_text_hash !== createHash('md5').update(f.fact).digest('hex')) {

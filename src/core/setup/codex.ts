@@ -31,13 +31,13 @@
  * leaves pending fingerprints the next run treats as owned, so a resume never
  * duplicates an entry, and an untrusted hook never runs.
  */
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { atomicWriteTextFile } from '../bootstrap/atomic-write.ts';
 import { ownedEntryFingerprint } from '../bootstrap/adopted-connections.ts';
 import { acquireBootstrapLock } from '../bootstrap/lock.ts';
 import { codexConfigPath } from '../bootstrap/host-specs.ts';
-import { appendCodexTomlTable, readCodexTomlTable, removeCodexTomlTable, type CodexTomlValue } from '../bootstrap/codex-toml.ts';
+import { appendCodexTomlTable, prependCodexTomlTopLevelInt, readCodexTomlTable, removeCodexTomlTable, removeCodexTomlTopLevelInt, type CodexTomlValue } from '../bootstrap/codex-toml.ts';
 import {
   CODEX_SETUP_EVENTS,
   CODEX_SETUP_LANE_TOKEN,
@@ -56,6 +56,16 @@ import { ensureHookLauncher, hookLauncherPath } from './hook-launcher.ts';
 
 export const CODEX_SETUP_RECEIPT_VERSION = 2;
 
+/**
+ * Codex (0.147+) gives MCP servers not marked `required` one shared 1 s window to start when it builds a turn's tool
+ * list, then leaves out every server still starting, for the whole of a one-shot `codex exec`. `gbrain serve` takes
+ * about 0.8 s to answer `initialize` and `tools/list` on a fast machine, so a slower one loses gbrain's tools for that
+ * session. `0` makes Codex wait for each server up to its own `startup_timeout_sec` (Codex 0.151+; 0.147 to 0.150
+ * ignore the key, except that `codex exec --strict-config` refuses it). It is a top-level key: setup writes it only
+ * when absent, never changes a value the user set, and `--remove` deletes only its own `0`.
+ */
+export const CODEX_STARTUP_GRACE_KEY = 'mcp_optional_startup_grace_ms';
+
 type Hashes = Partial<Record<CodexSetupEvent, string>>;
 interface TrustRecord { key: string; hash: string }
 type TrustRecords = Partial<Record<CodexSetupEvent, TrustRecord>>;
@@ -70,7 +80,15 @@ export interface CodexSetupReceipt {
   gbrain_home_env?: string;
   launcher: string;
   source_id: string | null;
+  /** GST-4069: the brain the table pins with GBRAIN_BRAIN_ID (absent: the session's directory picks it). */
+  brain_id?: string;
   surface: McpSurface;
+  /**
+   * I1: `explicit` when --surface (or GBRAIN_SURFACE) chose the surface or setup adopted an entry it did not write;
+   * `default` when it follows the Codex default (registrationProfile('codex')), which a re-run moves it to. Absent on a
+   * receipt written before setup recorded it: a re-run keeps that entry and prints the line that would move it.
+   */
+  surface_origin?: 'explicit' | 'default';
   /** The registration's `--advertise` (absent: tools/list shows the whole surface). */
   advertise?: McpSurface;
   config_path: string;
@@ -81,6 +99,8 @@ export interface CodexSetupReceipt {
   mcp_plugin?: string;
   hooks: { owned: Hashes; pending: Hashes; edited: Hashes };
   trust: { owned: TrustRecords; pending: TrustRecords; edited: TrustRecords };
+  /** `written`: setup set `mcp_optional_startup_grace_ms = 0` (CODEX_STARTUP_GRACE_KEY); `--remove` deletes it while it is still 0. */
+  startup_grace?: 'written';
   consent: SetupConsent & { recorded_at: string };
   brain_created_by_setup: boolean;
   native_harness_verified: false;
@@ -94,9 +114,13 @@ export interface CodexSetupPlan {
   brainHome: string;
   gbrainHomeEnv?: string;
   sourceId: string | null;
+  /** GST-4069: GBRAIN_BRAIN_ID in the table, so its sessions open this brain wherever they start; unset leaves it to the session's directory. */
+  brainId?: string;
   surface: McpSurface;
   /** `serve --advertise`; null lists the whole surface. */
   advertise: McpSurface | null;
+  /** I1: recorded in the receipt as surface_origin; unset keeps a pre-origin receipt as it was. */
+  surfaceOrigin?: 'explicit' | 'default';
   events: CodexSetupEvent[];
   /** GST-363: `serve --stdio-member`: this entry's sessions read as that member. Only a named --stdio-member or the entry setup already wrote sets it. */
   stdioMember?: string;
@@ -119,6 +143,8 @@ export interface CodexInspection {
   edited: Hashes;
   hooksCurrent: boolean;
   trustCurrent: boolean;
+  /** CODEX_STARTUP_GRACE_KEY: `ours` = setup's 0, `user` = a value setup did not write (kept as is), `absent` = unset. */
+  grace: { state: 'ours' | 'user' | 'absent'; value?: unknown };
 }
 
 export function codexSetupPaths(name: string): { configPath: string; hooksPath: string; receiptPath: string } {
@@ -140,6 +166,18 @@ export function readCodexSetupReceipt(receiptPath: string): { setup: CodexSetupR
 
 const writeReceipt = (path: string, receipt: CodexSetupReceipt) => atomicWriteTextFile(path, `${JSON.stringify(receipt, null, 2)}\n`, { forceMode: 0o600 });
 
+/** Another setup install in the same config dir (`--name`) records the grace key as setup's, so it stays setup's and stays put. */
+function graceOwnedElsewhere(receiptPath: string): boolean {
+  const dir = dirname(receiptPath);
+  let names: string[];
+  try { names = readdirSync(dir); } catch { return false; } // silent-read-ok: no readable receipt dir means no sibling install can claim the key
+  return names.some((f) => {
+    if (!f.startsWith('.gbrain-connection-codex-') || !f.endsWith('.json') || join(dir, f) === receiptPath) return false;
+    try { const r = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Partial<CodexSetupReceipt>; return r.startup_grace === 'written' && r.status !== 'removed'; }
+    catch { return false; } // silent-read-ok: an unreadable or malformed sibling receipt records no claim on the key
+  });
+}
+
 /**
  * Provider key and endpoint names Codex forwards from its own environment to
  * serve. Codex starts stdio servers with a scrubbed environment, so a key the
@@ -159,10 +197,11 @@ export const CODEX_FORWARDED_PROVIDER_ENV: readonly string[] = [
   'VOYAGE_API_KEY', 'ZHIPUAI_API_KEY',
 ];
 
-export function desiredCodexMcpEntry(plan: Pick<CodexSetupPlan, 'launcher' | 'brainHome' | 'surface' | 'advertise' | 'gbrainHomeEnv' | 'sourceId' | 'stdioMember'>): Record<string, CodexTomlValue> {
+export function desiredCodexMcpEntry(plan: Pick<CodexSetupPlan, 'launcher' | 'brainHome' | 'surface' | 'advertise' | 'gbrainHomeEnv' | 'sourceId' | 'brainId' | 'stdioMember'>): Record<string, CodexTomlValue> {
   const env: Record<string, string> = {};
   if (plan.gbrainHomeEnv) env.GBRAIN_HOME = plan.gbrainHomeEnv;
   if (plan.sourceId) env.GBRAIN_SOURCE = plan.sourceId;
+  if (plan.brainId) env.GBRAIN_BRAIN_ID = plan.brainId;
   // Codex starts stdio servers in the session's directory, so serve starts through the launcher too (#8426).
   return { command: hookLauncherPath(plan.brainHome), args: stdioServeArgv(plan.launcher, plan.surface, plan.advertise, plan.stdioMember), ...(Object.keys(env).length ? { env } : {}),
     env_vars: [...CODEX_FORWARDED_PROVIDER_ENV] };
@@ -244,7 +283,10 @@ export function inspectCodexSetup(plan: CodexSetupPlan): CodexInspection {
     }
   }
   const otherLaneEvents = [...new Set(census.filter((g) => g.lane === 'bootstrap').map((g) => g.event))];
-  return { ...paths, prior, hostedReceipt: hosted, mcp, otherLaneEvents, edited, hooksCurrent, trustCurrent };
+  const graceValue = readCodexTomlTable(paths.configPath, [CODEX_STARTUP_GRACE_KEY]);
+  const grace: CodexInspection['grace'] = graceValue === undefined ? { state: 'absent' }
+    : graceValue === 0 && (prior?.startup_grace === 'written' || graceOwnedElsewhere(paths.receiptPath)) ? { state: 'ours', value: 0 } : { state: 'user', value: graceValue };
+  return { ...paths, prior, hostedReceipt: hosted, mcp, otherLaneEvents, edited, hooksCurrent, trustCurrent, grace };
 }
 
 export interface CodexApplyResult { steps: CodexSetupStep[]; receipt: CodexSetupReceipt; changed: boolean; preserved: CodexPreserved[]; notes: string[] }
@@ -295,7 +337,9 @@ export async function applyCodexSetup(
     const notes: string[] = [];
     const mcpDone = opts.pluginOwner !== null || found.mcp.state === 'current';
     const consentSame = prior?.consent !== undefined && consentValues(prior.consent) === consentValues(consent);
-    if (prior?.status === 'installed' && consentSame && mcpDone && found.hooksCurrent && found.trustCurrent && !opts.brainCreated) {
+    const originSame = prior?.surface_origin === plan.surfaceOrigin;
+    const brainSame = (prior?.brain_id ?? null) === (opts.pluginOwner ? null : plan.brainId ?? null);
+    if (prior?.status === 'installed' && consentSame && originSame && brainSame && mcpDone && found.hooksCurrent && found.trustCurrent && found.grace.state !== 'absent' && !opts.brainCreated) {
       steps.push({ step: 'receipt', action: 'keep', detail: `${paths.receiptPath} already records this install` });
       steps.push({ step: 'mcp', action: opts.pluginOwner ? 'skip' : 'keep', detail: opts.pluginOwner ? `the '${opts.pluginOwner}' plugin serves '${plan.name}'` : `[mcp_servers.${plan.name}] in ${paths.configPath} is current` });
       steps.push({ step: 'hooks', action: 'keep', detail: plan.events.length ? `${plan.events.join(', ')} in ${paths.hooksPath} are current` : 'no hooks wanted' });
@@ -307,13 +351,15 @@ export async function applyCodexSetup(
     const receipt: CodexSetupReceipt = {
       harness: 'codex', connection: 'local-stdio', setup_receipt_version: CODEX_SETUP_RECEIPT_VERSION, status: 'prepared',
       name: plan.name, gbrain_home: plan.brainHome, ...(plan.gbrainHomeEnv ? { gbrain_home_env: plan.gbrainHomeEnv } : {}),
-      launcher: plan.launcher, source_id: plan.sourceId, surface: plan.surface, ...(plan.advertise ? { advertise: plan.advertise } : {}),
+      launcher: plan.launcher, source_id: plan.sourceId, ...(plan.brainId && !opts.pluginOwner ? { brain_id: plan.brainId } : {}), surface: plan.surface, ...(plan.surfaceOrigin ? { surface_origin: plan.surfaceOrigin } : {}),
+      ...(plan.advertise ? { advertise: plan.advertise } : {}),
       config_path: paths.configPath, hooks_path: paths.hooksPath,
       entry_hash: prior?.entry_hash ?? null, pending_entry_hash: opts.pluginOwner ? null : desiredHash,
       ...(prior?.mcp_adopted ? { mcp_adopted: true } : {}),
       ...(opts.pluginOwner ? { mcp_plugin: opts.pluginOwner } : {}),
       hooks: { owned: prior?.hooks.owned ?? {}, pending: want, edited: found.edited },
       trust: { owned: prior?.trust.owned ?? {}, pending: prior?.trust.pending ?? {}, edited: prior?.trust.edited ?? {} },
+      ...(found.grace.state === 'user' ? {} : { startup_grace: 'written' as const }),
       consent: { ...consent, recorded_at: now },
       brain_created_by_setup: (prior?.brain_created_by_setup ?? false) || opts.brainCreated,
       native_harness_verified: false,
@@ -341,6 +387,12 @@ export async function applyCodexSetup(
     }
     if (!opts.pluginOwner) receipt.entry_hash = desiredHash;
     receipt.pending_entry_hash = null;
+    if (found.grace.state === 'absent') {
+      prependCodexTomlTopLevelInt(paths.configPath, CODEX_STARTUP_GRACE_KEY, 0, `gbrain setup (${plan.name}): Codex waits for gbrain to start instead of leaving its tools out of a session; \`gbrain setup codex --remove\` deletes it while it is 0`);
+      steps.push({ step: 'mcp', action: 'write', detail: `${CODEX_STARTUP_GRACE_KEY} = 0 in ${paths.configPath}: Codex waits for '${plan.name}' to start (up to its startup_timeout_sec) instead of leaving its tools out of a session after 1 second` });
+    } else if (found.grace.state === 'user' && found.grace.value !== 0) {
+      steps.push({ step: 'mcp', action: 'preserve', detail: `${paths.configPath} sets ${CODEX_STARTUP_GRACE_KEY} = ${String(found.grace.value)}; kept, so a session where '${plan.name}' starts slower than that runs without its tools (0 makes Codex wait)` });
+    }
     save();
     if (opts.abortAfter === 'mcp') throw new SetupAbortInjected('mcp');
 
@@ -471,6 +523,17 @@ export async function removeCodexSetup(receipt: CodexSetupReceipt, receiptPath: 
     } else {
       preserved.push({ kind: 'mcp', reason: 'edited' });
       steps.push({ step: 'mcp', action: 'preserve', detail: `[mcp_servers.${receipt.name}] in ${receipt.config_path} changed after setup wrote it; kept` });
+    }
+
+    if (receipt.startup_grace === 'written') {
+      const grace = readCodexTomlTable(receipt.config_path, [CODEX_STARTUP_GRACE_KEY]);
+      if (grace === 0 && graceOwnedElsewhere(receiptPath)) {
+        steps.push({ step: 'mcp', action: 'keep', detail: `${CODEX_STARTUP_GRACE_KEY} in ${receipt.config_path}: another gbrain setup install in this config still uses it` });
+      } else if (grace === 0 && removeCodexTomlTopLevelInt(receipt.config_path, CODEX_STARTUP_GRACE_KEY, 0, { dryRun: opts.dryRun }) === 'removed') {
+        steps.push({ step: 'mcp', action: 'remove', detail: `${CODEX_STARTUP_GRACE_KEY} from ${receipt.config_path}` });
+      } else if (grace !== undefined) {
+        steps.push({ step: 'mcp', action: 'preserve', detail: `${CODEX_STARTUP_GRACE_KEY} in ${receipt.config_path} ${grace === 0 ? 'could not be located as one line' : 'changed after setup wrote it'}; kept` });
+      }
     }
 
     let receiptRemoved = false;

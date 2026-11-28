@@ -104,7 +104,7 @@ const SOURCE_CODES = new Set([
 const CONTENT_CODES = new Set([
   'invalid_params', 'invalid_connector_text', 'request_too_large', 'page_identity_changed', 'take_row_collision',
   'connector_fence_below_timeline', 'malformed', 'http_4xx', 'file_database_drift', 'page_body_segmented',
-  'connector_shape_drift', 'connector_item_too_large', 'connector_response_too_large',
+  'connector_shape_drift', 'connector_item_too_large', 'connector_response_too_large', 'contact_page_owned',
 ]);
 const POSTGRES_SOURCE_CODES: Record<string, string> = {
   '57014': 'statement_timeout', '55P03': 'lock_timeout', '40001': 'database_contention', '40P01': 'database_contention',
@@ -123,7 +123,7 @@ export function classifyConnectorError(error: unknown): ClassifiedConnectorError
   if (named === 'LockStolenError') return { code: 'lock_stolen', scope: 'source', class: 'transient', message };
   if (named === 'ConnectorWaitBudgetStop') return { code: 'write_pending', scope: 'source', class: 'transient', message };
   if (isCredentialError(error)) {
-    if (error.code === 'rate_limited') return { code: 'rate_limited', scope: 'rate_limit', class: 'transient', message };
+    if (error.code === 'rate_limited' || error.code === 'gbrainio_limit_reached') return { code: 'rate_limited', scope: 'rate_limit', class: 'transient', message };
     if (error.code !== 'upstream') return { code: error.code, scope: 'source', class: 'transient', message };
     const status = Number(message.match(/HTTP (\d{3})/)?.[1] ?? NaN);
     if (status === 401 || status === 403) return { code: 'auth', scope: 'source', class: 'transient', message };

@@ -32,10 +32,12 @@ import { fenceBody, withoutBody } from '../page-body/page-shape.ts';
 import { pipelined, transactionMemo } from '../page-state/transactions.ts';
 import { prepareCanonicalProjections } from './canonical-projections.ts';
 import { sliceMemo } from './slice-memo.ts';
+import { foreignCheckout } from './git-durability-policy.ts';
 import { withoutSafetyAssessments } from './reconcile-safety.ts';
 import { digest, sha256 } from './digest.ts';
 import { preserveProtectedTakes } from './protected-takes.ts';
 import { getWorktreeBinding } from './ownership.ts';
+import { storedWriterReadsHeld } from './page-visibility.ts';
 import { sourceMirrorReadOnly } from './mirror-read-only.ts';
 import { writeThroughConfigured } from './switches.ts';
 import { isSourceDbOnlySlug } from './source-storage.ts';
@@ -79,6 +81,7 @@ import { VERSION } from '../../version.ts';
 import { bindOrigin } from './origin-guard.ts';
 import { segmentedOutcome } from './searchable.ts';
 import { isQuarantined } from '../quarantine.ts';
+import { HELD_DELETION_HEAD_MOVED } from './sync-page-fault.ts';
 
 /** The options that select a managed sync cursor (its key), recorded so a refusal can print the exact retry. */
 export interface SyncCursorOptions { full: boolean; workingTree: boolean; srcSubpath: string | null; exclude: string[]; includeHidden: string[]; strategy: string | null }
@@ -145,6 +148,8 @@ export interface PassStamp {
   retryTaken: string[]; releasedHolds: string[];
   /** GBRA-133: deleted-side holds whose file is gone; the stamp releases those whose page is no longer live. */
   deletionCandidates?: DeletionCandidate[];
+  /** LC-1: the level's removal-pending paths (sync-removal-pending.ts), recorded on the converged stamp. */
+  removalPending?: Array<{ path: string; stat: string }> | null;
   selectionFp: string; parserFp: string; pack: string | null;
   /** The pass ran a full round (resets `passes_since_full`). */
   full: boolean;
@@ -330,7 +335,7 @@ export function screenSyncImport(input: SyncImportScreenInput): { screen: Import
   const newerWorkingTree = !input.companyApproval && !!base && !input.lineEndingOnly && input.rawHash !== sha256(content) && !sameCanonicalImport(base, parsedInput);
   const gateSource = input.writeGateSource;
   const gateTrust = gateSource ? ownerPageTrust({ frontmatter: parsedInput.frontmatter, sourceConfig: gateSource.config, channel: 'managed_sync_import', sourceUri: sourcePath }) : null;
-  const screen = screenImportContent({ content, path: `${slug}.md`, activePack, expectedSlug: resolveSlugForPath(sourcePath), fences: 'coordinated', holdNoncanonicalPrivate: true,
+  const screen = screenImportContent({ content, path: `${slug}.md`, activePack, expectedSlug: resolveSlugForPath(sourcePath), createsPage: !snapshot, fences: 'coordinated', holdNoncanonicalPrivate: true,
     ...(input.normalize === false ? { normalize: false } : {}),
     slugExempt: declared => snapshot?.page.source_path != null && syncOriginPath(snapshot.page.source_path) === syncOriginPath(sourcePath) && declared === snapshot.page.slug,
     slugConflictMessage: (found, expected) => frontmatterSlugConflictMessage(sourcePath, found, expected),
@@ -581,7 +586,7 @@ export async function publishPassStamp(tx: BrainEngine, row: WriteRequest, p: Sy
     { prior: pass.value.obligations.converged?.writeback });
   const value: ManagedSyncPassValue = structuredClone(pass.value);
   const at = new Date().toISOString(), prior = value.obligations.converged;
-  value.obligations.converged = { target: p.target, at, ...watermark, ...(stamp.rescreen ? { open_at_stamp: null } : {}),
+  value.obligations.converged = { target: p.target, at, ...watermark, ...(stamp.rescreen ? { open_at_stamp: null } : {}), ...(stamp.removalPending !== undefined ? { removal_pending: stamp.removalPending } : {}),
     parser_fp: stamp.parserFp, pack: stamp.pack, selection_fp: stamp.selectionFp, last_full_at: stamp.full || !prior ? at : prior.last_full_at,
     passes_since_full: stamp.full || !prior ? 0 : prior.passes_since_full + 1 };
   if (stamp.closesEpisode) delete value.obligations.episode;
@@ -749,6 +754,24 @@ function keepDbOnlyLabels(root: string, slug: string, base: Snapshot | undefined
   return withStoredLabels(text, base.page.frontmatter as Record<string, unknown>, incoming ?? parseMarkdown(text, `${slug}.md`).frontmatter) ?? text;
 }
 
+/** GST-3648: a held deletion was checked for a move at the pass's target; a commit since then can move its file, so it publishes only while HEAD is still that target. */
+function assertHeldDeletionHeadUnmoved(root: string, row: WriteRequest, p: SyncIntent): void {
+  if (p.kind !== 'managed_sync_delete' || !p.heldDeletion) return;
+  let head: string | null = null;
+  try { head = syncGit(root, ['rev-parse', 'HEAD']).trim(); } catch { /* unreadable: refused below */ }
+  if (head !== p.target) throw syncPublicationRefusal('source_changed', HELD_DELETION_HEAD_MOVED, row, p,
+    `HEAD of ${row.source_id} is no longer ${p.target.slice(0, 12)}, the commit the deletion of ${row.slug} was checked against for a move, so it published nothing; the page stays live and the next pass checks it again.`);
+}
+
+/**
+ * The owner check of the household subject rule for a sync row, decided once at prepare so a rename re-import inside
+ * the apply transaction reads nothing outside it. Only a page with a household_role asks.
+ */
+async function householdOwnerOf(engine: BrainEngine, authority: WriteRequest['authority'], frontmatters: Array<Record<string, unknown> | null | undefined>): Promise<() => Promise<boolean>> {
+  const owner = frontmatters.some(fm => fm?.household_role !== undefined) && await storedWriterReadsHeld(engine, authority);
+  return async () => owner;
+}
+
 /** #8729: a screen (`screening`) publishes nothing, so the segmented staging its import opened is aborted (unbounded: past the screen's deadline too) as soon as the import hands it over, never left live beside the admitted write's. */
 async function prepareSyncMutation(unbounded: BrainEngine, row: WriteRequest, _config: GBrainConfig, clock: ClaimPhaseClock | undefined,
   screening: { unsaved: true } | undefined, at: { root?: string; trend?: FenceTrendPrefix }): Promise<SyncPreparedMutation> {
@@ -820,6 +843,7 @@ async function prepareSyncMutation(unbounded: BrainEngine, row: WriteRequest, _c
           'sync.admission paused destructive sync writes before this deletion published.', row, p,
           `sync.admission is not normal, so the deletion of ${row.slug} in ${row.source_id} published nothing; the page stays live and the next pass re-reads the level.`);
       },
+      async () => assertHeldDeletionHeadUnmoved(root, row, p),
       async () => {
         // GBRA-133 S-22: a deletion whose name became a directory has no file to compare.
         if (p.path !== null && !p.body_ref && !p.committedOnly && (p.kind === 'managed_sync_delete' && directoryAt(root, p.path) ? null : syncRawHash(root, p.path)) !== p.rawHash) throw syncPublicationRefusal('source_changed', 'The imported file changed after sync admission.', row, p,
@@ -943,7 +967,7 @@ async function prepareSyncMutation(unbounded: BrainEngine, row: WriteRequest, _c
   let prepared: PreparedContentImport | undefined;
   enterClaimStep(clock, 'import_content', undefined, 'db');
   // #6188: the import reuses this screen's fence verdict for the same bytes (one fence scan per file at prepare).
-  const importOptions = { ...source, noEmbed: true, remote: row.authority.remote, preserveGateMarkers: true, activePack, coordinated: true, fences: 'coordinated' as const, boundedChunkWrites: true as const, writeGate: await ownerGateInput(engine, row, parsedInput.frontmatter, p.sourcePath),
+  const importOptions = { ...source, noEmbed: true, remote: row.authority.remote, householdOwner: await householdOwnerOf(engine, row.authority, [parsedInput.frontmatter, base?.page.frontmatter]), preserveGateMarkers: true, activePack, coordinated: true, fences: 'coordinated' as const, boundedChunkWrites: true as const, writeGate: await ownerGateInput(engine, row, parsedInput.frontmatter, p.sourcePath),
     ...(importContent === p.content && screen.status === 'importable' ? { fenceScreen: screen.fences ?? null } : {}),
     filename: basename(p.sourcePath).replace(/\.mdx?$/i, ''), sourcePath: p.sourcePath, allowEmptyOverwrite: true, history,
     segmentedOwner: { kind: 'sync' as const, principalKind: row.principal_kind, principalId: row.principal_id, baseRevision: base?.revision ?? null } };
@@ -974,10 +998,10 @@ async function prepareSyncMutation(unbounded: BrainEngine, row: WriteRequest, _c
   const overlay = digest(canonical(parsed, parsed.tags)) !== digest(canonical({ ...ready.parsedPage, type: renamedType ?? ready.parsedPage.type }, tags));
   const fenceFixes = ready.result.fences_normalized ?? [];
   if (overlay && p.companyApproval) throw companyWritebackRefusal(row, p, fenceFixes);
-  // #5409: a read-only mirror keeps its canonical metadata in the database only; its checkout stays the remote's bytes.
+  // #5409: a read-only mirror keeps its canonical metadata in the database only; its checkout stays the remote's bytes. GST-3743: so does every import of a checkout nothing on this host commits (foreignCheckout).
   enterClaimStep(clock, 'mirror_check', undefined, 'db');
-  const mirrorReadOnly = overlay && await sourceMirrorReadOnly(engine, row.source_id);
-  const canonicalFile = overlay && !mirrorReadOnly && writeThroughConfigured(await engine.getConfig('sync.write_through')) ? serializePageToMarkdown(renderedPage, tags) : null;
+  const databaseOnlyReason = overlay && await sourceMirrorReadOnly(engine, row.source_id) ? 'mirror_read_only' as const : await sliceMemo(unbounded, `foreign\0${row.source_id}`, () => foreignCheckout(engine, row.source_id, binding)) ? 'foreign_checkout' as const : undefined;
+  const canonicalFile = overlay && !databaseOnlyReason && writeThroughConfigured(await engine.getConfig('sync.write_through')) ? serializePageToMarkdown(renderedPage, tags) : null;
   const writeback = canonicalWritebackNeeded(row, p, p.content, canonicalFile);
   // A rename projects against the moved page (same id), so its pinned timeline rows carry over.
   enterClaimStep(clock, 'canonical_projections', undefined, 'db');
@@ -996,7 +1020,7 @@ async function prepareSyncMutation(unbounded: BrainEngine, row: WriteRequest, _c
     deferEmbedding: p.processingOptions?.noEmbed || p.embedDeferred === true, ...(!(p.processingOptions?.noEmbed || p.embedDeferred === true) && ready.noop && !moved && snapshot && await chunksEmbeddedAsIs(engine, snapshot.page.id) ? { embeddingCurrent: true } : {}),
     ...(ready.afterCommit || renamed ? { afterCommit: async (target: BrainEngine) => { await published.afterCommit?.(target); } } : {}),
     ...(writeback ? { file: { root, path: join(root, p.path), content: canonicalFile, expectedBeforeHash: p.rawHash } } : {}),
-    ...(mirrorReadOnly ? { databaseOnlyReason: 'mirror_read_only' as const } : {}),
+    ...(databaseOnlyReason ? { databaseOnlyReason } : {}),
     apply: async (tx, preimage) => {
       let applied = ready;
       if (renamed) {
